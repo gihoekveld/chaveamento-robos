@@ -15,6 +15,6 @@ WORKDIR /app
 
 COPY --from=build /app/target/*.jar app.jar
 
-# o Railway injeta PORT; application.properties ja le server.port=${PORT:8080}
+# Fly.io encaminha o trafego para a porta 8080 configurada em fly.toml.
 EXPOSE 8080
-ENTRYPOINT ["sh", "-c", "java -jar app.jar"]
+ENTRYPOINT ["java", "-jar", "app.jar"]
