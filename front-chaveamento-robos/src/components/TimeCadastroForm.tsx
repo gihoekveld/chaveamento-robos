@@ -200,7 +200,6 @@ export function TimeCadastroForm({ onSuccess, submitLabel = "Cadastrar" }: TimeC
           <SelectContent>
             <SelectItem value="ROBOCODE">RoboCode</SelectItem>
             <SelectItem value="ROBOSOCCER">RoboSoccer</SelectItem>
-            <SelectItem value="MARATONA_PROGRAMACAO">Maratona de Programação</SelectItem>
           </SelectContent>
         </Select>
       </div>
