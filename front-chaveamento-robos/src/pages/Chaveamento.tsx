@@ -31,6 +31,7 @@ import {
 const tipoLabel: Record<EnumTorneio, string> = {
   ROBOCODE: "RoboCode",
   ROBOSOCCER: "RoboSoccer",
+  MARATONA_PROGRAMACAO: "Maratona de Programação",
 };
 
 const faseLabel: Record<FasePartida, string> = {

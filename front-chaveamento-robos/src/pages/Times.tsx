@@ -35,6 +35,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 const tipoLabel: Record<EnumTime, string> = {
   ROBOCODE: "RoboCode",
   ROBOSOCCER: "RoboSoccer",
+  MARATONA_PROGRAMACAO: "Maratona de Programação",
 };
 
 const statusLabel: Record<StatusTime, string> = {

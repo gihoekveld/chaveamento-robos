@@ -1,4 +1,4 @@
-export type EnumTime = "ROBOCODE" | "ROBOSOCCER";
+export type EnumTime = "ROBOCODE" | "ROBOSOCCER" | "MARATONA_PROGRAMACAO";
 
 export type StatusTime = "PENDENTE" | "APROVADO" | "REJEITADO";
 
