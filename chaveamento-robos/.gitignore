@@ -3,7 +3,7 @@ target/
 !**/src/main/**/target/
 !**/src/test/**/target/
 .kotlin
-#
+##
 # fotos/audios agora vao pro Supabase Storage, nao pro disco local
 uploads/
 
