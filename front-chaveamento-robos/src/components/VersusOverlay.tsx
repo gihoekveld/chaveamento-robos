@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { resolveArquivoUrl } from "@/services/api";
 import type { Partida } from "@/types/partida";
 import { partidaService } from "@/services/partidaService";
-import { X, Radio } from "lucide-react";
+import { X, Radio, Keyboard } from "lucide-react";
 
 interface VersusTeam {
   nome: string;
@@ -26,6 +26,7 @@ interface VersusOverlayProps {
 }
 
 type Fase = "intro" | "contagem" | "vencedor";
+type ModoControle = "manual" | "automatico";
 
 const DURACAO_VENCEDOR_MS = 10000;
 
@@ -39,33 +40,39 @@ function corPlacar(minha: number, outra: number) {
 
 export function VersusOverlay({ partida, timeA, timeB, onConfirmar, onFechar, ehFinal = false }: VersusOverlayProps) {
   const [fase, setFase] = useState<Fase>(partida?.status === "EM_ANDAMENTO" ? "contagem" : "intro");
+  const [modo, setModo] = useState<ModoControle>(
+    partida?.status === "EM_ANDAMENTO" ? "automatico" : "manual"
+  );
   const [placarA, setPlacarA] = useState(partida?.placarTimeA ?? 0);
   const [placarB, setPlacarB] = useState(partida?.placarTimeB ?? 0);
 
-  // Sincronização em tempo real quando o Robocode envia resultados para a API
+  // Sincronização em tempo real quando em modo automático
   useEffect(() => {
     if (!partida) return;
 
-    if (partida.placarTimeA !== null && partida.placarTimeA !== placarA) {
-      if (partida.placarTimeA > placarA) {
-        tocarAudio(timeA?.audioGol ?? null);
+    if (modo === "automatico") {
+      if (partida.placarTimeA !== null && partida.placarTimeA !== placarA) {
+        if (partida.placarTimeA > placarA) {
+          tocarAudio(timeA?.audioGol ?? null);
+        }
+        setPlacarA(partida.placarTimeA);
       }
-      setPlacarA(partida.placarTimeA);
+
+      if (partida.placarTimeB !== null && partida.placarTimeB !== placarB) {
+        if (partida.placarTimeB > placarB) {
+          tocarAudio(timeB?.audioGol ?? null);
+        }
+        setPlacarB(partida.placarTimeB);
+      }
     }
 
-    if (partida.placarTimeB !== null && partida.placarTimeB !== placarB) {
-      if (partida.placarTimeB > placarB) {
-        tocarAudio(timeB?.audioGol ?? null);
-      }
-      setPlacarB(partida.placarTimeB);
-    }
-
-    // Se o Robocode iniciou a partida ou já está em andamento, avança a tela
+    // Se o simulador iniciou a partida externamente, avança a tela no modo automático
     if (partida.status === "EM_ANDAMENTO" && fase === "intro") {
       setFase("contagem");
+      setModo("automatico");
     }
 
-    // Se o backend marcou a partida como finalizada (vencedor atingido)
+    // Se a partida foi finalizada pelo simulador na API
     if (partida.status === "FINALIZADA" && fase !== "vencedor") {
       if (ehFinal) {
         onConfirmar(partida.placarTimeA ?? placarA, partida.placarTimeB ?? placarB);
@@ -73,9 +80,12 @@ export function VersusOverlay({ partida, timeA, timeB, onConfirmar, onFechar, eh
         setFase("vencedor");
       }
     }
-  }, [partida, placarA, placarB, fase, ehFinal, onConfirmar, timeA, timeB]);
+  }, [partida, placarA, placarB, fase, ehFinal, onConfirmar, timeA, timeB, modo]);
 
-  function handleIniciarContagem() {
+  function handleIniciarContagem(modoEscolhido?: ModoControle) {
+    if (modoEscolhido) {
+      setModo(modoEscolhido);
+    }
     setFase("contagem");
     if (partida && partida.status === "AGUARDANDO") {
       partidaService.iniciar(partida.id).catch(() => {});
@@ -100,6 +110,9 @@ export function VersusOverlay({ partida, timeA, timeB, onConfirmar, onFechar, eh
         e.preventDefault();
         setPlacarB((v) => v + 1);
         tocarAudio(timeB?.audioGol ?? null);
+      } else if (e.code === "ArrowDown") {
+        e.preventDefault();
+        setPlacarA((v) => Math.max(0, v - 1));
       } else if (e.code === "Space") {
         e.preventDefault();
         // na final quem celebra é a tela de campeão — pula direto pro modal de resultado
@@ -211,19 +224,37 @@ export function VersusOverlay({ partida, timeA, timeB, onConfirmar, onFechar, eh
         <>
           <div className="vs-flash pointer-events-none absolute inset-0 bg-white" />
 
-          <div className="vs-headline absolute left-1/2 top-8 -translate-x-1/2 flex flex-col items-center gap-1.5 z-[105]">
+          <div className="vs-headline absolute left-1/2 top-6 -translate-x-1/2 flex flex-col items-center gap-1.5 z-[105]">
             <h1 className="whitespace-nowrap text-center text-xl font-black italic uppercase tracking-[0.3em] text-white drop-shadow-[0_2px_6px_rgba(0,0,0,0.85)] sm:text-2xl">
               Duelo de Times {partida ? `• Partida #${partida.id}` : ""}
             </h1>
-            {partida?.status === "EM_ANDAMENTO" && (
-              <span className="flex items-center gap-1.5 text-[11px] font-mono font-bold text-amber-400 bg-amber-500/20 px-3 py-0.5 rounded-full border border-amber-500/40 animate-pulse">
-                <Radio className="h-3.5 w-3.5" />
-                AO VIVO
-              </span>
+            {fase === "contagem" && (
+              <div className="flex items-center gap-2">
+                {modo === "automatico" ? (
+                  <span className="flex items-center gap-1.5 text-[11px] font-mono font-bold text-amber-400 bg-amber-500/20 px-3 py-0.5 rounded-full border border-amber-500/40 animate-pulse">
+                    <Radio className="h-3.5 w-3.5" />
+                    AO VIVO (API)
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-1.5 text-[11px] font-mono font-bold text-emerald-400 bg-emerald-500/20 px-3 py-0.5 rounded-full border border-emerald-500/40">
+                    <Keyboard className="h-3.5 w-3.5" />
+                    MODO MANUAL (SETAS)
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setModo((m) => (m === "manual" ? "automatico" : "manual"))}
+                  title="Trocar modo"
+                  className="text-[10px] text-white/50 hover:text-white underline font-mono tracking-wide"
+                >
+                  [mudar para {modo === "manual" ? "automático" : "manual"}]
+                </button>
+              </div>
             )}
           </div>
 
           <div className="relative flex h-full flex-col items-center justify-center gap-10 px-6 sm:flex-row sm:gap-4">
+            {/* Time A */}
             <div className="vs-fighter-left flex flex-1 flex-col items-center gap-3">
               <VersusAvatar time={timeA} />
               <span className="max-w-full truncate text-center text-2xl font-black italic uppercase tracking-wide text-white drop-shadow-[0_2px_6px_rgba(0,0,0,0.85)] sm:text-4xl">
@@ -237,25 +268,85 @@ export function VersusOverlay({ partida, timeA, timeB, onConfirmar, onFechar, eh
                   <span className="text-[10px] font-semibold uppercase tracking-[0.3em] text-white/60 sm:text-xs">
                     Pontuação atual
                   </span>
+                  {modo === "manual" && (
+                    <div className="flex items-center gap-2 mt-1 z-20">
+                      <button
+                        type="button"
+                        onClick={() => setPlacarA((v) => Math.max(0, v - 1))}
+                        className="h-7 w-7 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center font-bold text-sm transition-all active:scale-90"
+                        title="Diminuir ponto"
+                      >
+                        -
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPlacarA((v) => v + 1);
+                          tocarAudio(timeA?.audioGol ?? null);
+                        }}
+                        className="h-7 w-7 rounded-full bg-white/20 hover:bg-white/30 text-white flex items-center justify-center font-bold text-sm transition-all active:scale-90"
+                        title="Adicionar ponto (ou seta ←)"
+                      >
+                        +
+                      </button>
+                    </div>
+                  )}
                 </>
               )}
             </div>
 
-            <div className="vs-title z-10 flex shrink-0 flex-col items-center gap-6 px-2">
+            {/* Centro VS */}
+            <div className="vs-title z-10 flex shrink-0 flex-col items-center gap-5 px-2">
               <span className="text-7xl font-black italic leading-none text-yellow-400 drop-shadow-[0_4px_10px_rgba(0,0,0,0.9)] sm:text-8xl">
                 VS
               </span>
               {fase === "intro" && (
-                <button
-                  type="button"
-                  onClick={handleIniciarContagem}
-                  className="vs-button rounded-md border-2 border-yellow-400 bg-black/40 px-6 py-2 text-sm font-black uppercase tracking-widest text-yellow-400 transition-colors hover:bg-yellow-400 hover:text-black sm:text-base"
-                >
-                  Iniciar partida
-                </button>
+                <div className="vs-button flex flex-col items-center gap-3">
+                  <div className="flex items-center gap-1.5 rounded-lg bg-black/60 p-1 border border-white/20 backdrop-blur">
+                    <button
+                      type="button"
+                      onClick={() => setModo("manual")}
+                      className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-bold transition-all ${
+                        modo === "manual"
+                          ? "bg-yellow-400 text-black shadow"
+                          : "text-white/70 hover:text-white"
+                      }`}
+                    >
+                      <Keyboard className="h-3.5 w-3.5" />
+                      Manual (Setas)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setModo("automatico")}
+                      className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-bold transition-all ${
+                        modo === "automatico"
+                          ? "bg-yellow-400 text-black shadow"
+                          : "text-white/70 hover:text-white"
+                      }`}
+                    >
+                      <Radio className="h-3.5 w-3.5" />
+                      Automático (API)
+                    </button>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => handleIniciarContagem()}
+                    className="rounded-md border-2 border-yellow-400 bg-yellow-400/20 px-8 py-2 text-sm font-black uppercase tracking-widest text-yellow-400 transition-all hover:bg-yellow-400 hover:text-black hover:scale-105 active:scale-95 sm:text-base"
+                  >
+                    Iniciar duelo
+                  </button>
+
+                  <span className="text-[11px] text-white/60 text-center max-w-[240px]">
+                    {modo === "manual"
+                      ? "Gols controlados no teclado (← e →) e salvos ao confirmar"
+                      : "Gols recebidos da API do Robocode ou RoboSoccer"}
+                  </span>
+                </div>
               )}
             </div>
 
+            {/* Time B */}
             <div className="vs-fighter-right flex flex-1 flex-col items-center gap-3">
               <VersusAvatar time={timeB} />
               <span className="max-w-full truncate text-center text-2xl font-black italic uppercase tracking-wide text-white drop-shadow-[0_2px_6px_rgba(0,0,0,0.85)] sm:text-4xl">
@@ -269,14 +360,39 @@ export function VersusOverlay({ partida, timeA, timeB, onConfirmar, onFechar, eh
                   <span className="text-[10px] font-semibold uppercase tracking-[0.3em] text-white/60 sm:text-xs">
                     Pontuação atual
                   </span>
+                  {modo === "manual" && (
+                    <div className="flex items-center gap-2 mt-1 z-20">
+                      <button
+                        type="button"
+                        onClick={() => setPlacarB((v) => Math.max(0, v - 1))}
+                        className="h-7 w-7 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center font-bold text-sm transition-all active:scale-90"
+                        title="Diminuir ponto"
+                      >
+                        -
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPlacarB((v) => v + 1);
+                          tocarAudio(timeB?.audioGol ?? null);
+                        }}
+                        className="h-7 w-7 rounded-full bg-white/20 hover:bg-white/30 text-white flex items-center justify-center font-bold text-sm transition-all active:scale-90"
+                        title="Adicionar ponto (ou seta →)"
+                      >
+                        +
+                      </button>
+                    </div>
+                  )}
                 </>
               )}
             </div>
           </div>
 
           {fase === "contagem" && (
-            <p className="vs-hint absolute bottom-10 left-1/2 -translate-x-1/2 whitespace-nowrap text-xs font-semibold uppercase tracking-[0.35em] text-white/80 sm:text-sm">
-              ← ponto da esquerda - espaço para registrar - ponto da direita →
+            <p className="vs-hint absolute bottom-8 left-1/2 -translate-x-1/2 whitespace-nowrap text-xs font-semibold uppercase tracking-[0.35em] text-white/80 sm:text-sm">
+              {modo === "manual"
+                ? "← gol time A · espaço para finalizar · gol time B →"
+                : "📡 aguardando gols do simulador · espaço para finalizar"}
             </p>
           )}
         </>

@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, RotateCcw, Shuffle, Swords, Trophy, Users, Copy } from "lucide-react";
+import { AlertTriangle, RotateCcw, Shuffle, Swords, Trophy, Users } from "lucide-react";
 import { toast } from "sonner";
 import { chaveamentoService } from "@/services/chaveamentoService";
 import { partidaService } from "@/services/partidaService";
