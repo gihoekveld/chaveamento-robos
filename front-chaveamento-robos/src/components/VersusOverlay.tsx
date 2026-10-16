@@ -46,6 +46,7 @@ export function VersusOverlay({ partida, timeA, timeB, onConfirmar, onFechar, eh
   const [placarA, setPlacarA] = useState(partida?.placarTimeA ?? 0);
   const [placarB, setPlacarB] = useState(partida?.placarTimeB ?? 0);
   const [menuAberto, setMenuAberto] = useState(false);
+  const [confirmandoZerar, setConfirmandoZerar] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -53,6 +54,7 @@ export function VersusOverlay({ partida, timeA, timeB, onConfirmar, onFechar, eh
     function handleClickFora(e: MouseEvent) {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
         setMenuAberto(false);
+        setConfirmandoZerar(false);
       }
     }
     document.addEventListener("mousedown", handleClickFora);
@@ -163,7 +165,10 @@ export function VersusOverlay({ partida, timeA, timeB, onConfirmar, onFechar, eh
         <div className="relative" ref={menuRef}>
           <button
             type="button"
-            onClick={() => setMenuAberto((v) => !v)}
+            onClick={() => {
+              setMenuAberto((v) => !v);
+              setConfirmandoZerar(false);
+            }}
             title="Opções do duelo"
             className={`flex h-10 w-10 items-center justify-center rounded-full backdrop-blur transition-all active:scale-95 ${
               menuAberto ? "bg-white/30 text-white" : "bg-white/10 text-white hover:bg-white/20 hover:scale-105"
@@ -207,7 +212,7 @@ export function VersusOverlay({ partida, timeA, timeB, onConfirmar, onFechar, eh
                 </div>
                 <p className="text-[10px] text-white/40 mt-1.5 px-0.5">
                   {modo === "manual"
-                    ? "Manual: pontuação controlada nas setas (não sobrescreve via API)."
+                    ? "Manual: pontuação controlada nas setas."
                     : "Automático: sincroniza em tempo real com a API."}
                 </p>
               </div>
@@ -281,16 +286,44 @@ export function VersusOverlay({ partida, timeA, timeB, onConfirmar, onFechar, eh
 
               <div className="h-px bg-white/10 my-3" />
 
-              <button
-                type="button"
-                onClick={() => {
-                  setPlacarA(0);
-                  setPlacarB(0);
-                }}
-                className="w-full text-center py-1.5 rounded-md text-[11px] text-red-400 hover:bg-red-500/10 transition-colors"
-              >
-                Zerar placar
-              </button>
+              {confirmandoZerar ? (
+                <div className="flex flex-col gap-2 p-2.5 rounded-lg bg-red-950/60 border border-red-500/40 animate-in fade-in duration-100">
+                  <span className="text-[11px] text-red-200 text-center font-medium">
+                    Tem certeza que deseja zerar o placar?
+                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setConfirmandoZerar(false)}
+                      className="flex-1 py-1 rounded bg-white/10 hover:bg-white/20 text-[11px] font-medium text-white transition-colors"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPlacarA(0);
+                        setPlacarB(0);
+                        setConfirmandoZerar(false);
+                        if (partida?.id) {
+                          partidaService.resetar(partida.id).catch(() => {});
+                        }
+                      }}
+                      className="flex-1 py-1 rounded bg-red-600 hover:bg-red-500 text-[11px] font-bold text-white transition-colors shadow"
+                    >
+                      Sim, zerar
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setConfirmandoZerar(true)}
+                  className="w-full text-center py-1.5 rounded-md text-[11px] text-red-400 hover:bg-red-500/10 transition-colors"
+                >
+                  Zerar placar
+                </button>
+              )}
             </div>
           )}
         </div>
