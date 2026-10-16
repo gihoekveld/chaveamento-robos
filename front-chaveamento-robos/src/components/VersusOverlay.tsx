@@ -1,8 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { resolveArquivoUrl } from "@/services/api";
 import type { Partida } from "@/types/partida";
 import { partidaService } from "@/services/partidaService";
-import { X, Radio, Keyboard } from "lucide-react";
+import { X, Radio, Keyboard, MoreVertical } from "lucide-react";
 
 interface VersusTeam {
   nome: string;
@@ -45,6 +45,19 @@ export function VersusOverlay({ partida, timeA, timeB, onConfirmar, onFechar, eh
   );
   const [placarA, setPlacarA] = useState(partida?.placarTimeA ?? 0);
   const [placarB, setPlacarB] = useState(partida?.placarTimeB ?? 0);
+  const [menuAberto, setMenuAberto] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!menuAberto) return;
+    function handleClickFora(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuAberto(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickFora);
+    return () => document.removeEventListener("mousedown", handleClickFora);
+  }, [menuAberto]);
 
   // Sincronização em tempo real quando em modo automático
   useEffect(() => {
@@ -145,16 +158,154 @@ export function VersusOverlay({ partida, timeA, timeB, onConfirmar, onFechar, eh
 
   return (
     <div className="fixed inset-0 z-[100] overflow-hidden bg-black">
-      {onFechar && (
-        <button
-          type="button"
-          onClick={onFechar}
-          title="Fechar duelo (Esc)"
-          className="absolute right-6 top-6 z-[110] flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white backdrop-blur transition-all hover:bg-white/20 hover:scale-105 active:scale-95"
-        >
-          <X className="h-5 w-5" />
-        </button>
-      )}
+      <div className="absolute right-6 top-6 z-[110] flex items-center gap-2">
+        {/* Menu discreto de opções e troca de modo */}
+        <div className="relative" ref={menuRef}>
+          <button
+            type="button"
+            onClick={() => setMenuAberto((v) => !v)}
+            title="Opções do duelo"
+            className={`flex h-10 w-10 items-center justify-center rounded-full backdrop-blur transition-all active:scale-95 ${
+              menuAberto ? "bg-white/30 text-white" : "bg-white/10 text-white hover:bg-white/20 hover:scale-105"
+            }`}
+          >
+            <MoreVertical className="h-5 w-5" />
+          </button>
+
+          {menuAberto && (
+            <div className="absolute right-0 top-12 z-[120] w-72 rounded-xl border border-white/20 bg-zinc-950/95 p-4 shadow-2xl backdrop-blur-2xl text-white font-sans text-xs animate-in fade-in zoom-in-95 duration-150">
+              {/* Modo de Pontuação */}
+              <div className="mb-3">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-white/50 block mb-2">
+                  Modo de Pontuação
+                </span>
+                <div className="grid grid-cols-2 gap-1.5 p-1 rounded-lg bg-white/5 border border-white/10">
+                  <button
+                    type="button"
+                    onClick={() => setModo("manual")}
+                    className={`flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-md font-medium text-xs transition-all ${
+                      modo === "manual"
+                        ? "bg-yellow-400 text-black font-bold shadow"
+                        : "text-white/70 hover:text-white"
+                    }`}
+                  >
+                    <Keyboard className="h-3.5 w-3.5" />
+                    Manual
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setModo("automatico")}
+                    className={`flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-md font-medium text-xs transition-all ${
+                      modo === "automatico"
+                        ? "bg-yellow-400 text-black font-bold shadow"
+                        : "text-white/70 hover:text-white"
+                    }`}
+                  >
+                    <Radio className="h-3.5 w-3.5" />
+                    Automático
+                  </button>
+                </div>
+                <p className="text-[10px] text-white/40 mt-1.5 px-0.5">
+                  {modo === "manual"
+                    ? "Manual: pontuação controlada nas setas (não sobrescreve via API)."
+                    : "Automático: sincroniza em tempo real com a API."}
+                </p>
+              </div>
+
+              <div className="h-px bg-white/10 my-3" />
+
+              {/* Ajuste Manual de Placar */}
+              <div className="mb-2">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-white/50 block mb-2">
+                  Ajustar Placar
+                </span>
+
+                {/* Time A */}
+                <div className="flex items-center justify-between py-1.5 border-b border-white/5">
+                  <span className="truncate max-w-[130px] font-medium" title={timeA?.nome}>
+                    {timeA?.nome ?? "Time A"}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setPlacarA((v) => Math.max(0, v - 1))}
+                      className="h-6 w-6 rounded bg-white/10 hover:bg-white/20 flex items-center justify-center text-xs font-bold transition-all active:scale-95"
+                      title="Diminuir ponto"
+                    >
+                      -
+                    </button>
+                    <span className="w-5 text-center font-mono font-bold">{placarA}</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPlacarA((v) => v + 1);
+                        tocarAudio(timeA?.audioGol ?? null);
+                      }}
+                      className="h-6 w-6 rounded bg-white/20 hover:bg-white/30 flex items-center justify-center text-xs font-bold transition-all active:scale-95"
+                      title="Adicionar ponto"
+                    >
+                      +
+                    </button>
+                  </div>
+                </div>
+
+                {/* Time B */}
+                <div className="flex items-center justify-between py-1.5">
+                  <span className="truncate max-w-[130px] font-medium" title={timeB?.nome}>
+                    {timeB?.nome ?? "Time B"}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setPlacarB((v) => Math.max(0, v - 1))}
+                      className="h-6 w-6 rounded bg-white/10 hover:bg-white/20 flex items-center justify-center text-xs font-bold transition-all active:scale-95"
+                      title="Diminuir ponto"
+                    >
+                      -
+                    </button>
+                    <span className="w-5 text-center font-mono font-bold">{placarB}</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPlacarB((v) => v + 1);
+                        tocarAudio(timeB?.audioGol ?? null);
+                      }}
+                      className="h-6 w-6 rounded bg-white/20 hover:bg-white/30 flex items-center justify-center text-xs font-bold transition-all active:scale-95"
+                      title="Adicionar ponto"
+                    >
+                      +
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="h-px bg-white/10 my-3" />
+
+              <button
+                type="button"
+                onClick={() => {
+                  setPlacarA(0);
+                  setPlacarB(0);
+                }}
+                className="w-full text-center py-1.5 rounded-md text-[11px] text-red-400 hover:bg-red-500/10 transition-colors"
+              >
+                Zerar placar
+              </button>
+            </div>
+          )}
+        </div>
+
+        {onFechar && (
+          <button
+            type="button"
+            onClick={onFechar}
+            title="Fechar duelo (Esc)"
+            className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white backdrop-blur transition-all hover:bg-white/20 hover:scale-105 active:scale-95"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        )}
+      </div>
 
       <style>{`
         @keyframes vs-slide-left {
@@ -224,32 +375,15 @@ export function VersusOverlay({ partida, timeA, timeB, onConfirmar, onFechar, eh
         <>
           <div className="vs-flash pointer-events-none absolute inset-0 bg-white" />
 
-          <div className="vs-headline absolute left-1/2 top-6 -translate-x-1/2 flex flex-col items-center gap-1.5 z-[105]">
+          <div className="vs-headline absolute left-1/2 top-6 -translate-x-1/2 flex flex-col items-center gap-1 z-[105]">
             <h1 className="whitespace-nowrap text-center text-xl font-black italic uppercase tracking-[0.3em] text-white drop-shadow-[0_2px_6px_rgba(0,0,0,0.85)] sm:text-2xl">
               Duelo de Times {partida ? `• Partida #${partida.id}` : ""}
             </h1>
-            {fase === "contagem" && (
-              <div className="flex items-center gap-2">
-                {modo === "automatico" ? (
-                  <span className="flex items-center gap-1.5 text-[11px] font-mono font-bold text-amber-400 bg-amber-500/20 px-3 py-0.5 rounded-full border border-amber-500/40 animate-pulse">
-                    <Radio className="h-3.5 w-3.5" />
-                    AO VIVO (API)
-                  </span>
-                ) : (
-                  <span className="flex items-center gap-1.5 text-[11px] font-mono font-bold text-emerald-400 bg-emerald-500/20 px-3 py-0.5 rounded-full border border-emerald-500/40">
-                    <Keyboard className="h-3.5 w-3.5" />
-                    MODO MANUAL (SETAS)
-                  </span>
-                )}
-                <button
-                  type="button"
-                  onClick={() => setModo((m) => (m === "manual" ? "automatico" : "manual"))}
-                  title="Trocar modo"
-                  className="text-[10px] text-white/50 hover:text-white underline font-mono tracking-wide"
-                >
-                  [mudar para {modo === "manual" ? "automático" : "manual"}]
-                </button>
-              </div>
+            {fase === "contagem" && modo === "automatico" && (
+              <span className="flex items-center gap-1.5 text-[10px] font-mono font-bold text-amber-400 bg-amber-500/20 px-2.5 py-0.5 rounded-full border border-amber-500/40 animate-pulse">
+                <Radio className="h-3 w-3" />
+                AO VIVO
+              </span>
             )}
           </div>
 
@@ -273,53 +407,18 @@ export function VersusOverlay({ partida, timeA, timeB, onConfirmar, onFechar, eh
             </div>
 
             {/* Centro VS */}
-            <div className="vs-title z-10 flex shrink-0 flex-col items-center gap-5 px-2">
+            <div className="vs-title z-10 flex shrink-0 flex-col items-center gap-6 px-2">
               <span className="text-7xl font-black italic leading-none text-yellow-400 drop-shadow-[0_4px_10px_rgba(0,0,0,0.9)] sm:text-8xl">
                 VS
               </span>
               {fase === "intro" && (
-                <div className="vs-button flex flex-col items-center gap-3">
-                  <div className="flex items-center gap-1.5 rounded-lg bg-black/60 p-1 border border-white/20 backdrop-blur">
-                    <button
-                      type="button"
-                      onClick={() => setModo("manual")}
-                      className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-bold transition-all ${
-                        modo === "manual"
-                          ? "bg-yellow-400 text-black shadow"
-                          : "text-white/70 hover:text-white"
-                      }`}
-                    >
-                      <Keyboard className="h-3.5 w-3.5" />
-                      Manual (Setas)
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setModo("automatico")}
-                      className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-bold transition-all ${
-                        modo === "automatico"
-                          ? "bg-yellow-400 text-black shadow"
-                          : "text-white/70 hover:text-white"
-                      }`}
-                    >
-                      <Radio className="h-3.5 w-3.5" />
-                      Automático (API)
-                    </button>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => handleIniciarContagem()}
-                    className="rounded-md border-2 border-yellow-400 bg-yellow-400/20 px-8 py-2 text-sm font-black uppercase tracking-widest text-yellow-400 transition-all hover:bg-yellow-400 hover:text-black hover:scale-105 active:scale-95 sm:text-base"
-                  >
-                    Iniciar duelo
-                  </button>
-
-                  <span className="text-[11px] text-white/60 text-center max-w-[240px]">
-                    {modo === "manual"
-                      ? "Gols controlados no teclado (← e →) e salvos ao confirmar"
-                      : "Gols recebidos da API do Robocode ou RoboSoccer"}
-                  </span>
-                </div>
+                <button
+                  type="button"
+                  onClick={() => handleIniciarContagem()}
+                  className="vs-button rounded-md border-2 border-yellow-400 bg-black/40 px-8 py-2.5 text-sm font-black uppercase tracking-widest text-yellow-400 transition-colors hover:bg-yellow-400 hover:text-black sm:text-base shadow-lg"
+                >
+                  Iniciar partida
+                </button>
               )}
             </div>
 
@@ -345,8 +444,8 @@ export function VersusOverlay({ partida, timeA, timeB, onConfirmar, onFechar, eh
           {fase === "contagem" && (
             <p className="vs-hint absolute bottom-8 left-1/2 -translate-x-1/2 whitespace-nowrap text-xs font-semibold uppercase tracking-[0.35em] text-white/80 sm:text-sm">
               {modo === "manual"
-                ? "← gol time A · espaço para finalizar · gol time B →"
-                : "📡 aguardando gols do simulador · espaço para finalizar"}
+                ? "← ponto time A · espaço para finalizar · ponto time B →"
+                : "📡 sincronizando via API · espaço para finalizar"}
             </p>
           )}
         </>
