@@ -2,6 +2,7 @@ package org.chaveamento.service;
 
 import org.chaveamento.dto.time.TimeResponse;
 import org.chaveamento.model.participacaotorneio.ParticipacaoTorneio;
+import org.chaveamento.model.time.StatusTime;
 import org.chaveamento.model.time.Time;
 import org.chaveamento.model.torneio.Torneio;
 import org.chaveamento.repository.ParticipacaoTorneioRepository;
@@ -39,6 +40,14 @@ public class ParticipacaoTorneioService {
 
         Time time = timeRepository.findById(timeId)
                 .orElseThrow(() -> new RuntimeException("Time não encontrado"));
+
+        if (time.getStatus() != StatusTime.APROVADO) {
+            throw new RuntimeException("Apenas times com status APROVADO podem ser inscritos no torneio.");
+        }
+
+        if (!torneio.getTipo().name().equals(time.getTipo().name())) {
+            throw new RuntimeException("A categoria do time não corresponde à categoria deste torneio.");
+        }
 
         if(participacaoRepository.existsByTorneioIdAndTimeId(torneioId, timeId)){
             throw new RuntimeException("O time já está inscrito nesse torneio");

@@ -115,10 +115,8 @@ export default function Times() {
     }
   }
 
-  // o time só é vinculado a um torneio automaticamente no cadastro, se já existir
-  // um torneio aberto daquela categoria naquele momento — se o torneio for criado
-  // depois, o time fica sem torneio até alguém inscrever manualmente. Por isso,
-  // ao aprovar, tentamos de novo (backend recusa se já estiver inscrito, ignoramos)
+  // ao aprovar um time, se existir um torneio aberto da mesma categoria,
+  // inscrevemos automaticamente o time no torneio
   async function tentarInscreverNoTorneio(time: Time, opts?: { avisarSeJaInscrito?: boolean }) {
     const torneioDaCategoria =
       torneios?.find((t) => t.tipo === time.tipo && t.status === "INSCRICOES") ??
@@ -126,7 +124,7 @@ export default function Times() {
 
     if (!torneioDaCategoria) {
       toast.warning(
-        `Ainda não há torneio de ${tipoLabel[time.tipo]} cadastrado — crie um na tela de Torneios e inscreva o time depois.`
+        `Time aprovado, mas ainda não há torneio de ${tipoLabel[time.tipo]} cadastrado — crie um na tela de Torneios e inscreva o time depois.`
       );
       return;
     }
