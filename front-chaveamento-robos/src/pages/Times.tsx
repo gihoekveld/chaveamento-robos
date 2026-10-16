@@ -14,6 +14,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ErrorState } from "@/components/ErrorState";
 import { TimeCadastroForm } from "@/components/TimeCadastroForm";
 import { TimeAudioRevisao } from "@/components/TimeAudioRevisao";
+import { TimeImagemRevisao } from "@/components/TimeImagemRevisao";
 import {
   Table,
   TableBody,
@@ -151,6 +152,16 @@ export default function Times() {
     },
     onError: () => toast.error("Não foi possível reprovar o time."),
     onSettled: () => setProcessandoId(null),
+  });
+
+  const uploadImagemMutation = useMutation({
+    mutationFn: ({ id, file }: { id: number; file: File }) => timeService.uploadImagem(id, file),
+    onSuccess: (timeAtualizado) => {
+      queryClient.setQueryData(["time", timeAtualizado.id], timeAtualizado);
+      invalidarTimes();
+      toast.success("Foto do time atualizada.");
+    },
+    onError: () => toast.error("Não foi possível enviar a foto do time."),
   });
 
   const uploadAudioGolMutation = useMutation({
@@ -362,19 +373,15 @@ export default function Times() {
               </DialogHeader>
 
               <div className="space-y-4 py-2">
-                <div className="flex justify-center">
-                  {timeDetalhe.imagem ? (
-                    <img
-                      src={resolveArquivoUrl(timeDetalhe.imagem)}
-                      alt={timeDetalhe.nome}
-                      className="h-32 w-32 rounded-md border object-cover"
-                    />
-                  ) : (
-                    <div className="flex h-32 w-32 items-center justify-center rounded-md border border-dashed text-muted-foreground">
-                      <Users className="h-8 w-8" />
-                    </div>
-                  )}
-                </div>
+                <TimeImagemRevisao
+                  imagemUrl={timeDetalhe.imagem}
+                  nomeTime={timeDetalhe.nome}
+                  editavel={isAdmin}
+                  enviando={
+                    uploadImagemMutation.isPending && uploadImagemMutation.variables?.id === timeDetalhe.id
+                  }
+                  onSubstituir={(file) => uploadImagemMutation.mutate({ id: timeDetalhe.id, file })}
+                />
 
                 <TimeAudioRevisao
                   label="Áudio de gol (até 2s)"

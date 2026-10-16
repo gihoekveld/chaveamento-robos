@@ -61,8 +61,10 @@ public class SecurityConfig {
                                 "/swagger-ui/**",
                                 "/v3/api-docs/**"
                         ).permitAll()
+                        .requestMatchers(HttpMethod.GET, "/uploads/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/usuarios").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.PATCH, "/api/times/*/aprovar", "/api/times/*/reprovar").hasRole("ADMIN")
+                        .requestMatchers(HttpMethod.PUT, "/partidas/*/resultado", "/partidas/admin/*/resultado").hasRole("ADMIN")
                         .anyRequest().authenticated()
                 )
                 .authenticationProvider(authenticationProvider())

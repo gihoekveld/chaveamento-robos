@@ -27,8 +27,8 @@ interface VersusOverlayProps {
   onModoChange?: (modo: ModoControle) => void;
 }
 
-type Fase = "intro" | "contagem" | "vencedor";
-type ModoControle = "manual" | "automatico";
+export type Fase = "intro" | "contagem" | "vencedor";
+export type ModoControle = "manual" | "automatico";
 
 const DURACAO_VENCEDOR_MS = 10000;
 
@@ -38,6 +38,62 @@ function corPlacar(minha: number, outra: number) {
   if (diferenca === 0) return "text-zinc-300";
   if (Math.abs(diferenca) === 1) return "text-yellow-400";
   return diferenca > 0 ? "text-emerald-400" : "text-red-500";
+}
+
+export function getModoPartidaSalvo(partidaId?: number | null): ModoControle | null {
+  if (!partidaId) return null;
+  try {
+    const salvo = localStorage.getItem(`modo_partida_${partidaId}`);
+    if (salvo === "manual" || salvo === "automatico") {
+      return salvo;
+    }
+  } catch {}
+  return null;
+}
+
+export function salvarModoPartida(partidaId: number | null | undefined, modo: ModoControle) {
+  if (!partidaId) return;
+  try {
+    localStorage.setItem(`modo_partida_${partidaId}`, modo);
+  } catch {}
+}
+
+export function limparModoPartida(partidaId?: number | null) {
+  if (!partidaId) return;
+  try {
+    localStorage.removeItem(`modo_partida_${partidaId}`);
+  } catch {}
+}
+
+export function getPlacarManualSalvo(partidaId?: number | null): { placarA: number; placarB: number } | null {
+  if (!partidaId) return null;
+  try {
+    const raw = localStorage.getItem(`placar_manual_partida_${partidaId}`);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (typeof parsed?.placarA === "number" && typeof parsed?.placarB === "number") {
+        return { placarA: parsed.placarA, placarB: parsed.placarB };
+      }
+    }
+  } catch {}
+  return null;
+}
+
+export function salvarPlacarManual(partidaId: number | null | undefined, placarA: number, placarB: number) {
+  if (!partidaId) return;
+  try {
+    localStorage.setItem(
+      `placar_manual_partida_${partidaId}`,
+      JSON.stringify({ placarA, placarB })
+    );
+  } catch {}
+}
+
+export function limparPlacarManual(partidaId?: number | null) {
+  if (!partidaId) return;
+  try {
+    localStorage.removeItem(`placar_manual_partida_${partidaId}`);
+  } catch {}
 }
 
 export function VersusOverlay({
@@ -50,21 +106,146 @@ export function VersusOverlay({
   modo: modoProp,
   onModoChange,
 }: VersusOverlayProps) {
+  const modoSalvo = getModoPartidaSalvo(partida?.id);
+  const modoInicial = modoSalvo ?? modoProp ?? "manual";
   const [fase, setFase] = useState<Fase>(partida?.status === "EM_ANDAMENTO" ? "contagem" : "intro");
-  const [modoLocal, setModoLocal] = useState<ModoControle>(
-    modoProp ?? (partida?.status === "EM_ANDAMENTO" ? "automatico" : "manual")
-  );
+  const [modoLocal, setModoLocal] = useState<ModoControle>(modoInicial);
   const modo = modoProp ?? modoLocal;
 
-  function alterarModo(novoModo: ModoControle) {
-    setModoLocal(novoModo);
-    onModoChange?.(novoModo);
-  }
-  const [placarA, setPlacarA] = useState(partida?.placarTimeA ?? 0);
-  const [placarB, setPlacarB] = useState(partida?.placarTimeB ?? 0);
+  // Placar manual recuperado do localStorage (se existir) ou inicial da partida
+  const manualSalvoInicial = getPlacarManualSalvo(partida?.id);
+  const placarManualRef = useRef<{ placarA: number; placarB: number }>(
+    manualSalvoInicial ?? {
+      placarA: partida?.placarTimeA ?? 0,
+      placarB: partida?.placarTimeB ?? 0,
+    }
+  );
+
+  // Placar automático recebido da API / simulação
+  const placarAutoRef = useRef<{ placarA: number; placarB: number }>({
+    placarA: partida?.placarTimeA ?? 0,
+    placarB: partida?.placarTimeB ?? 0,
+  });
+
+  const [placarA, setPlacarA] = useState(() => {
+    if (modoInicial === "manual" && manualSalvoInicial) {
+      return manualSalvoInicial.placarA;
+    }
+    return partida?.placarTimeA ?? 0;
+  });
+
+  const [placarB, setPlacarB] = useState(() => {
+    if (modoInicial === "manual" && manualSalvoInicial) {
+      return manualSalvoInicial.placarB;
+    }
+    return partida?.placarTimeB ?? 0;
+  });
+
   const [menuAberto, setMenuAberto] = useState(false);
   const [confirmandoZerar, setConfirmandoZerar] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+
+  function finalizarPartida(scoreA: number, scoreB: number) {
+    limparPlacarManual(partida?.id);
+    limparModoPartida(partida?.id);
+    onConfirmar(scoreA, scoreB);
+  }
+
+  function alterarModo(novoModo: ModoControle) {
+    if (novoModo === modo) return;
+
+    salvarModoPartida(partida?.id, novoModo);
+
+    if (novoModo === "manual") {
+      // Alternando de AUTOMÁTICO para MANUAL:
+      // Preserva o placar automático que estava na tela
+      placarAutoRef.current = { placarA, placarB };
+
+      // Restaura o placar manual do localStorage ou ref
+      const manualSalvo = getPlacarManualSalvo(partida?.id) ?? placarManualRef.current;
+      placarManualRef.current = manualSalvo;
+      setPlacarA(manualSalvo.placarA);
+      setPlacarB(manualSalvo.placarB);
+    } else {
+      // Alternando de MANUAL para AUTOMÁTICO:
+      // Apenas se estava no modo manual salva o placar manual atual no localStorage
+      if (modo === "manual") {
+        placarManualRef.current = { placarA, placarB };
+        salvarPlacarManual(partida?.id, placarA, placarB);
+      }
+
+      // Troca imediatamente para o placar automático (mesmo que momentâneo até a API responder)
+      const autoA = partida?.placarTimeA ?? placarAutoRef.current.placarA;
+      const autoB = partida?.placarTimeB ?? placarAutoRef.current.placarB;
+      setPlacarA(autoA);
+      setPlacarB(autoB);
+    }
+
+    setModoLocal(novoModo);
+    onModoChange?.(novoModo);
+  }
+
+  // Sincroniza modo se alterado externamente
+  useEffect(() => {
+    if (modoProp && modoProp !== modoLocal) {
+      setModoLocal(modoProp);
+    }
+  }, [modoProp, modoLocal]);
+
+  // Funções de ajuste de pontuação manual
+  function handleIncrementarA() {
+    if (modo !== "manual") return;
+    setPlacarA((prevA) => {
+      const novo = prevA + 1;
+      placarManualRef.current.placarA = novo;
+      salvarPlacarManual(partida?.id, novo, placarManualRef.current.placarB);
+      return novo;
+    });
+    tocarAudio(timeA?.audioGol ?? null);
+  }
+
+  function handleDecrementarA() {
+    if (modo !== "manual") return;
+    setPlacarA((prevA) => {
+      const novo = Math.max(0, prevA - 1);
+      placarManualRef.current.placarA = novo;
+      salvarPlacarManual(partida?.id, novo, placarManualRef.current.placarB);
+      return novo;
+    });
+  }
+
+  function handleIncrementarB() {
+    if (modo !== "manual") return;
+    setPlacarB((prevB) => {
+      const novo = prevB + 1;
+      placarManualRef.current.placarB = novo;
+      salvarPlacarManual(partida?.id, placarManualRef.current.placarA, novo);
+      return novo;
+    });
+    tocarAudio(timeB?.audioGol ?? null);
+  }
+
+  function handleDecrementarB() {
+    if (modo !== "manual") return;
+    setPlacarB((prevB) => {
+      const novo = Math.max(0, prevB - 1);
+      placarManualRef.current.placarB = novo;
+      salvarPlacarManual(partida?.id, placarManualRef.current.placarA, novo);
+      return novo;
+    });
+  }
+
+  function handleZerarPlacar() {
+    if (modo !== "manual") return;
+    setPlacarA(0);
+    setPlacarB(0);
+    placarManualRef.current = { placarA: 0, placarB: 0 };
+    salvarPlacarManual(partida?.id, 0, 0);
+    setConfirmandoZerar(false);
+    if (partida?.id) {
+      partidaService.resetar(partida.id).catch(() => {});
+    }
+  }
 
   useEffect(() => {
     if (!menuAberto) return;
@@ -82,6 +263,13 @@ export function VersusOverlay({
   useEffect(() => {
     if (!partida) return;
 
+    if (partida.placarTimeA !== null) {
+      placarAutoRef.current.placarA = partida.placarTimeA;
+    }
+    if (partida.placarTimeB !== null) {
+      placarAutoRef.current.placarB = partida.placarTimeB;
+    }
+
     if (modo === "automatico") {
       if (partida.placarTimeA !== null && partida.placarTimeA !== placarA) {
         if (partida.placarTimeA > placarA) {
@@ -98,16 +286,18 @@ export function VersusOverlay({
       }
     }
 
-    // Se o simulador iniciou a partida externamente, avança a tela no modo automático
+    // Se o simulador iniciou a partida externamente, avança a tela
     if (partida.status === "EM_ANDAMENTO" && fase === "intro") {
       setFase("contagem");
-      alterarModo("automatico");
+      if (modo !== "manual" && !modoSalvo) {
+        alterarModo("automatico");
+      }
     }
 
     // Se a partida foi finalizada pelo simulador na API
     if (partida.status === "FINALIZADA" && fase !== "vencedor") {
       if (ehFinal) {
-        onConfirmar(partida.placarTimeA ?? placarA, partida.placarTimeB ?? placarB);
+        finalizarPartida(partida.placarTimeA ?? placarA, partida.placarTimeB ?? placarB);
       } else {
         setFase("vencedor");
       }
@@ -115,7 +305,7 @@ export function VersusOverlay({
   }, [partida, placarA, placarB, fase, ehFinal, onConfirmar, timeA, timeB, modo]);
 
   function handleIniciarContagem(modoEscolhido?: ModoControle) {
-    if (modoEscolhido) {
+    if (modoEscolhido && modoEscolhido !== modo) {
       alterarModo(modoEscolhido);
     }
     setFase("contagem");
@@ -136,20 +326,24 @@ export function VersusOverlay({
 
       if (e.code === "ArrowLeft") {
         e.preventDefault();
-        setPlacarA((v) => v + 1);
-        tocarAudio(timeA?.audioGol ?? null);
+        if (modo === "manual") {
+          handleIncrementarA();
+        }
       } else if (e.code === "ArrowRight") {
         e.preventDefault();
-        setPlacarB((v) => v + 1);
-        tocarAudio(timeB?.audioGol ?? null);
+        if (modo === "manual") {
+          handleIncrementarB();
+        }
       } else if (e.code === "ArrowDown") {
         e.preventDefault();
-        setPlacarA((v) => Math.max(0, v - 1));
+        if (modo === "manual") {
+          handleDecrementarA();
+        }
       } else if (e.code === "Space") {
         e.preventDefault();
         // na final quem celebra é a tela de campeão — pula direto pro modal de resultado
         if (ehFinal) {
-          onConfirmar(placarA, placarB);
+          finalizarPartida(placarA, placarB);
         } else {
           setFase("vencedor");
         }
@@ -157,16 +351,16 @@ export function VersusOverlay({
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [fase, ehFinal, placarA, placarB, onConfirmar, onFechar, timeA, timeB]);
+  }, [fase, ehFinal, placarA, placarB, onFechar, modo, timeA, timeB, partida]);
 
   const empate = placarA === placarB;
   const timeVencedor = placarA > placarB ? timeA : placarB > placarA ? timeB : null;
 
   useEffect(() => {
     if (fase !== "vencedor") return;
-    const timer = setTimeout(() => onConfirmar(placarA, placarB), DURACAO_VENCEDOR_MS);
+    const timer = setTimeout(() => finalizarPartida(placarA, placarB), DURACAO_VENCEDOR_MS);
     return () => clearTimeout(timer);
-  }, [fase, placarA, placarB, onConfirmar]);
+  }, [fase, placarA, placarB]);
 
   useEffect(() => {
     if (fase !== "vencedor" || !timeVencedor) return;
@@ -229,18 +423,26 @@ export function VersusOverlay({
                 </div>
                 <p className="text-[10px] text-white/40 mt-1.5 px-0.5">
                   {modo === "manual"
-                    ? "Manual: pontuação controlada nas setas."
+                    ? "Manual: pontuação controlada nas setas ou no menu."
                     : "Automático: sincroniza em tempo real com a API."}
                 </p>
               </div>
 
               <div className="h-px bg-white/10 my-3" />
 
-              {/* Ajuste Manual de Placar */}
+              {/* Ajuste de Placar */}
               <div className="mb-2">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-white/50 block mb-2">
-                  Ajustar Placar
-                </span>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-white/50 block">
+                    Ajustar Placar
+                  </span>
+                </div>
+
+                {modo === "automatico" && (
+                  <p className="text-[10px] text-amber-200/80 mb-2 leading-relaxed bg-amber-500/10 p-2 rounded border border-amber-500/20">
+                    O placar é atualizado automaticamente pela API. Para ajustar manualmente, mude para o modo <strong>Manual</strong> acima.
+                  </p>
+                )}
 
                 {/* Time A */}
                 <div className="flex items-center justify-between py-1.5 border-b border-white/5">
@@ -250,21 +452,20 @@ export function VersusOverlay({
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
-                      onClick={() => setPlacarA((v) => Math.max(0, v - 1))}
-                      className="h-6 w-6 rounded bg-white/10 hover:bg-white/20 flex items-center justify-center text-xs font-bold transition-all active:scale-95"
-                      title="Diminuir ponto"
+                      disabled={modo === "automatico"}
+                      onClick={handleDecrementarA}
+                      className="h-6 w-6 rounded bg-white/10 hover:bg-white/20 flex items-center justify-center text-xs font-bold transition-all active:scale-95 disabled:opacity-25 disabled:cursor-not-allowed disabled:pointer-events-none"
+                      title={modo === "automatico" ? "Desabilitado no modo automático" : "Diminuir ponto"}
                     >
                       -
                     </button>
                     <span className="w-5 text-center font-mono font-bold">{placarA}</span>
                     <button
                       type="button"
-                      onClick={() => {
-                        setPlacarA((v) => v + 1);
-                        tocarAudio(timeA?.audioGol ?? null);
-                      }}
-                      className="h-6 w-6 rounded bg-white/20 hover:bg-white/30 flex items-center justify-center text-xs font-bold transition-all active:scale-95"
-                      title="Adicionar ponto"
+                      disabled={modo === "automatico"}
+                      onClick={handleIncrementarA}
+                      className="h-6 w-6 rounded bg-white/20 hover:bg-white/30 flex items-center justify-center text-xs font-bold transition-all active:scale-95 disabled:opacity-25 disabled:cursor-not-allowed disabled:pointer-events-none"
+                      title={modo === "automatico" ? "Desabilitado no modo automático" : "Adicionar ponto"}
                     >
                       +
                     </button>
@@ -279,21 +480,20 @@ export function VersusOverlay({
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
-                      onClick={() => setPlacarB((v) => Math.max(0, v - 1))}
-                      className="h-6 w-6 rounded bg-white/10 hover:bg-white/20 flex items-center justify-center text-xs font-bold transition-all active:scale-95"
-                      title="Diminuir ponto"
+                      disabled={modo === "automatico"}
+                      onClick={handleDecrementarB}
+                      className="h-6 w-6 rounded bg-white/10 hover:bg-white/20 flex items-center justify-center text-xs font-bold transition-all active:scale-95 disabled:opacity-25 disabled:cursor-not-allowed disabled:pointer-events-none"
+                      title={modo === "automatico" ? "Desabilitado no modo automático" : "Diminuir ponto"}
                     >
                       -
                     </button>
                     <span className="w-5 text-center font-mono font-bold">{placarB}</span>
                     <button
                       type="button"
-                      onClick={() => {
-                        setPlacarB((v) => v + 1);
-                        tocarAudio(timeB?.audioGol ?? null);
-                      }}
-                      className="h-6 w-6 rounded bg-white/20 hover:bg-white/30 flex items-center justify-center text-xs font-bold transition-all active:scale-95"
-                      title="Adicionar ponto"
+                      disabled={modo === "automatico"}
+                      onClick={handleIncrementarB}
+                      className="h-6 w-6 rounded bg-white/20 hover:bg-white/30 flex items-center justify-center text-xs font-bold transition-all active:scale-95 disabled:opacity-25 disabled:cursor-not-allowed disabled:pointer-events-none"
+                      title={modo === "automatico" ? "Desabilitado no modo automático" : "Adicionar ponto"}
                     >
                       +
                     </button>
@@ -303,7 +503,11 @@ export function VersusOverlay({
 
               <div className="h-px bg-white/10 my-3" />
 
-              {confirmandoZerar ? (
+              {modo === "automatico" ? (
+                <div className="text-center py-1 text-[10px] text-white/30 italic">
+                  Zerar placar indisponível no modo automático
+                </div>
+              ) : confirmandoZerar ? (
                 <div className="flex flex-col gap-2 p-2.5 rounded-lg bg-red-950/60 border border-red-500/40 animate-in fade-in duration-100">
                   <span className="text-[11px] text-red-200 text-center font-medium">
                     Tem certeza que deseja zerar o placar?
@@ -318,14 +522,7 @@ export function VersusOverlay({
                     </button>
                     <button
                       type="button"
-                      onClick={() => {
-                        setPlacarA(0);
-                        setPlacarB(0);
-                        setConfirmandoZerar(false);
-                        if (partida?.id) {
-                          partidaService.resetar(partida.id).catch(() => {});
-                        }
-                      }}
+                      onClick={handleZerarPlacar}
                       className="flex-1 py-1 rounded bg-red-600 hover:bg-red-500 text-[11px] font-bold text-white transition-colors shadow"
                     >
                       Sim, zerar

@@ -175,6 +175,49 @@ public class PartidaService {
             throw new RuntimeException("Essa partida já foi finalizada");
         }
 
+        if (partida.getTimeA() == null || partida.getTimeB() == null) {
+            throw new RuntimeException("Não é possível registrar resultado sem os dois times definidos");
+        }
+
+        if (request.placarTimeA() < 0 || request.placarTimeB() < 0) {
+            throw new RuntimeException("O placar não pode ser negativo");
+        }
+
+        if (request.placarTimeA().equals(request.placarTimeB())) {
+            throw new RuntimeException("A partida não pode terminar empatada");
+        }
+
+        partida.setPlacarTimeA(request.placarTimeA());
+        partida.setPlacarTimeB(request.placarTimeB());
+
+        Time vencedor;
+        if (request.placarTimeA() > request.placarTimeB()) {
+            vencedor = partida.getTimeA();
+        } else {
+            vencedor = partida.getTimeB();
+        }
+
+        partida.setVencedor(vencedor);
+        partida.setStatus(StatusPartida.FINALIZADA);
+
+        avancarVencedor(partida);
+
+        Partida salva = partidaRepository.save(partida);
+        return toResponse(salva);
+    }
+
+    public PartidaResponse atualizarResultado(
+            Long partidaId,
+            ResultadoPartidaRequest request) {
+
+        Partida partida = partidaRepository.findById(partidaId)
+                .orElseThrow(() ->
+                        new RuntimeException("Partida não encontrada"));
+
+        if (partida.getTimeA() == null || partida.getTimeB() == null) {
+            throw new RuntimeException("Não é possível atualizar resultado sem os dois times definidos");
+        }
+
         if (request.placarTimeA() < 0 || request.placarTimeB() < 0) {
             throw new RuntimeException("O placar não pode ser negativo");
         }
@@ -208,10 +251,23 @@ public class PartidaService {
             return;
         }
 
+        Time antigoTime = (partida.getPosicaoProximaPartida() == PosicaoProximaPartida.TIME_A)
+                ? proxima.getTimeA()
+                : proxima.getTimeB();
+
         if (partida.getPosicaoProximaPartida() == PosicaoProximaPartida.TIME_A) {
             proxima.setTimeA(partida.getVencedor());
         } else if (partida.getPosicaoProximaPartida() == PosicaoProximaPartida.TIME_B) {
             proxima.setTimeB(partida.getVencedor());
+        }
+
+        if (antigoTime != null && !antigoTime.getId().equals(partida.getVencedor().getId())) {
+            if (proxima.getStatus() != StatusPartida.AGUARDANDO) {
+                proxima.setStatus(StatusPartida.AGUARDANDO);
+                proxima.setPlacarTimeA(0);
+                proxima.setPlacarTimeB(0);
+                proxima.setVencedor(null);
+            }
         }
 
         partidaRepository.save(proxima);

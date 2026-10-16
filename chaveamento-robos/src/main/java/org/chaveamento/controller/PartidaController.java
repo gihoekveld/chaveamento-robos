@@ -52,6 +52,19 @@ public class PartidaController {
         );
     }
 
+    @PutMapping({ "/{partidaId}/resultado", "/admin/{partidaId}/resultado" })
+    public ResponseEntity<PartidaResponse> atualizarResultado(
+            @PathVariable Long partidaId,
+            @RequestBody ResultadoPartidaRequest request) {
+
+        return ResponseEntity.ok(
+                partidaService.atualizarResultado(
+                        partidaId,
+                        request
+                )
+        );
+    }
+
     @ExceptionHandler(RuntimeException.class)
     public ResponseEntity<java.util.Map<String, String>> handleRuntimeException(RuntimeException e) {
         return ResponseEntity.badRequest().body(java.util.Map.of("erro", e.getMessage() != null ? e.getMessage() : "Erro inesperado"));
