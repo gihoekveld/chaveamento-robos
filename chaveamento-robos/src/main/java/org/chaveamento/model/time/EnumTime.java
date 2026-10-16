@@ -2,5 +2,6 @@ package org.chaveamento.model.time;
 
 public enum EnumTime {
     ROBOCODE,
-    ROBOSOCCER
+    ROBOSOCCER,
+    MARATONA_PROGRAMACAO
 }

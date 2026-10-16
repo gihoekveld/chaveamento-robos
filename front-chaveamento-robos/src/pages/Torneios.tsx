@@ -31,6 +31,7 @@ import { Label } from "@/components/ui/label";
 const tipoLabel: Record<EnumTorneio, string> = {
   ROBOCODE: "RoboCode",
   ROBOSOCCER: "RoboSoccer",
+  MARATONA_PROGRAMACAO: "Maratona de Programação",
 };
 
 const statusLabel: Record<StatusTorneio, string> = {

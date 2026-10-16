@@ -15,6 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 const tipoLabel: Record<EnumTime, string> = {
   ROBOCODE: "RoboCode",
   ROBOSOCCER: "RoboSoccer",
+  MARATONA_PROGRAMACAO: "Maratona de Programação",
 };
 
 interface TimeCadastroFormProps {
@@ -45,6 +46,9 @@ export function TimeCadastroForm({ onSuccess, submitLabel = "Cadastrar" }: TimeC
   // então o form segue sem checagem de duplicidade nem auto-inscrição
   const { data: times } = useQuery({ queryKey: ["times"], queryFn: timeService.listar, retry: false });
   const { data: torneios } = useQuery({ queryKey: ["torneios"], queryFn: torneioService.listar, retry: false });
+
+  // maratona de programação não usa imagem nem áudio do time
+  const semMidia = tipo === "MARATONA_PROGRAMACAO";
 
   useEffect(() => {
     if (!imagemRecortada) {
@@ -135,7 +139,7 @@ export function TimeCadastroForm({ onSuccess, submitLabel = "Cadastrar" }: TimeC
 
     const falhas: string[] = [];
 
-    if (imagemRecortada) {
+    if (!semMidia && imagemRecortada) {
       try {
         const arquivo = new File([imagemRecortada], "time.jpg", { type: "image/jpeg" });
         await timeService.uploadImagem(time.id, arquivo);
@@ -144,7 +148,7 @@ export function TimeCadastroForm({ onSuccess, submitLabel = "Cadastrar" }: TimeC
       }
     }
 
-    if (audioGol) {
+    if (!semMidia && audioGol) {
       try {
         await timeService.uploadAudioGol(time.id, audioGol);
       } catch {
@@ -152,7 +156,7 @@ export function TimeCadastroForm({ onSuccess, submitLabel = "Cadastrar" }: TimeC
       }
     }
 
-    if (audioVitoria) {
+    if (!semMidia && audioVitoria) {
       try {
         await timeService.uploadAudioVitoria(time.id, audioVitoria);
       } catch {
@@ -200,6 +204,7 @@ export function TimeCadastroForm({ onSuccess, submitLabel = "Cadastrar" }: TimeC
         </Select>
       </div>
 
+      {!semMidia && (
       <div className="space-y-2">
         <Label htmlFor="imagem">Imagem do time (opcional)</Label>
         <div className="flex items-center gap-3">
@@ -242,12 +247,16 @@ export function TimeCadastroForm({ onSuccess, submitLabel = "Cadastrar" }: TimeC
           />
         </div>
       </div>
+      )}
 
+      {!semMidia && (
       <div className="space-y-2">
         <Label>Áudio de gol (opcional, até 2s — recorte se for maior)</Label>
         <AudioPicker arquivo={audioGol} onSelecionar={handleSelecionarAudioGol} onRemover={() => setAudioGol(null)} />
       </div>
+      )}
 
+      {!semMidia && (
       <div className="space-y-2">
         <Label>Áudio de vitória (opcional, até 10s — recorte se for maior)</Label>
         <AudioPicker
@@ -256,6 +265,7 @@ export function TimeCadastroForm({ onSuccess, submitLabel = "Cadastrar" }: TimeC
           onRemover={() => setAudioVitoria(null)}
         />
       </div>
+      )}
 
       {erro && <p className="text-sm text-destructive">{erro}</p>}
 
