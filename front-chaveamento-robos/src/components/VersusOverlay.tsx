@@ -1,5 +1,8 @@
 import { useEffect, useState } from "react";
 import { resolveArquivoUrl } from "@/services/api";
+import type { Partida } from "@/types/partida";
+import { partidaService } from "@/services/partidaService";
+import { X, Radio } from "lucide-react";
 
 interface VersusTeam {
   nome: string;
@@ -14,9 +17,11 @@ function tocarAudio(caminho: string | null) {
 }
 
 interface VersusOverlayProps {
+  partida?: Partida | null;
   timeA: VersusTeam | null;
   timeB: VersusTeam | null;
   onConfirmar: (placarA: number, placarB: number) => void;
+  onFechar?: () => void;
   ehFinal?: boolean;
 }
 
@@ -32,15 +37,61 @@ function corPlacar(minha: number, outra: number) {
   return diferenca > 0 ? "text-emerald-400" : "text-red-500";
 }
 
-export function VersusOverlay({ timeA, timeB, onConfirmar, ehFinal = false }: VersusOverlayProps) {
-  const [fase, setFase] = useState<Fase>("intro");
-  const [placarA, setPlacarA] = useState(0);
-  const [placarB, setPlacarB] = useState(0);
+export function VersusOverlay({ partida, timeA, timeB, onConfirmar, onFechar, ehFinal = false }: VersusOverlayProps) {
+  const [fase, setFase] = useState<Fase>(partida?.status === "EM_ANDAMENTO" ? "contagem" : "intro");
+  const [placarA, setPlacarA] = useState(partida?.placarTimeA ?? 0);
+  const [placarB, setPlacarB] = useState(partida?.placarTimeB ?? 0);
+
+  // Sincronização em tempo real quando o Robocode envia resultados para a API
+  useEffect(() => {
+    if (!partida) return;
+
+    if (partida.placarTimeA !== null && partida.placarTimeA !== placarA) {
+      if (partida.placarTimeA > placarA) {
+        tocarAudio(timeA?.audioGol ?? null);
+      }
+      setPlacarA(partida.placarTimeA);
+    }
+
+    if (partida.placarTimeB !== null && partida.placarTimeB !== placarB) {
+      if (partida.placarTimeB > placarB) {
+        tocarAudio(timeB?.audioGol ?? null);
+      }
+      setPlacarB(partida.placarTimeB);
+    }
+
+    // Se o Robocode iniciou a partida ou já está em andamento, avança a tela
+    if (partida.status === "EM_ANDAMENTO" && fase === "intro") {
+      setFase("contagem");
+    }
+
+    // Se o backend marcou a partida como finalizada (vencedor atingido)
+    if (partida.status === "FINALIZADA" && fase !== "vencedor") {
+      if (ehFinal) {
+        onConfirmar(partida.placarTimeA ?? placarA, partida.placarTimeB ?? placarB);
+      } else {
+        setFase("vencedor");
+      }
+    }
+  }, [partida, placarA, placarB, fase, ehFinal, onConfirmar, timeA, timeB]);
+
+  function handleIniciarContagem() {
+    setFase("contagem");
+    if (partida && partida.status === "AGUARDANDO") {
+      partidaService.iniciar(partida.id).catch(() => {});
+    }
+  }
 
   useEffect(() => {
-    if (fase !== "contagem") return;
-
     function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape" && onFechar) {
+        e.preventDefault();
+        onFechar();
+        return;
+      }
+
+      if (fase !== "contagem") return;
+
       if (e.code === "ArrowLeft") {
         e.preventDefault();
         setPlacarA((v) => v + 1);
@@ -61,7 +112,7 @@ export function VersusOverlay({ timeA, timeB, onConfirmar, ehFinal = false }: Ve
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [fase, ehFinal, placarA, placarB, onConfirmar, timeA, timeB]);
+  }, [fase, ehFinal, placarA, placarB, onConfirmar, onFechar, timeA, timeB]);
 
   const empate = placarA === placarB;
   const timeVencedor = placarA > placarB ? timeA : placarB > placarA ? timeB : null;
@@ -81,6 +132,17 @@ export function VersusOverlay({ timeA, timeB, onConfirmar, ehFinal = false }: Ve
 
   return (
     <div className="fixed inset-0 z-[100] overflow-hidden bg-black">
+      {onFechar && (
+        <button
+          type="button"
+          onClick={onFechar}
+          title="Fechar duelo (Esc)"
+          className="absolute right-6 top-6 z-[110] flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white backdrop-blur transition-all hover:bg-white/20 hover:scale-105 active:scale-95"
+        >
+          <X className="h-5 w-5" />
+        </button>
+      )}
+
       <style>{`
         @keyframes vs-slide-left {
           from { transform: translateX(-130%); opacity: 0; }
@@ -149,9 +211,17 @@ export function VersusOverlay({ timeA, timeB, onConfirmar, ehFinal = false }: Ve
         <>
           <div className="vs-flash pointer-events-none absolute inset-0 bg-white" />
 
-          <h1 className="vs-headline absolute left-1/2 top-10 -translate-x-1/2 whitespace-nowrap text-center text-xl font-black italic uppercase tracking-[0.3em] text-white drop-shadow-[0_2px_6px_rgba(0,0,0,0.85)] sm:text-2xl">
-            Duelo de Times
-          </h1>
+          <div className="vs-headline absolute left-1/2 top-8 -translate-x-1/2 flex flex-col items-center gap-1.5 z-[105]">
+            <h1 className="whitespace-nowrap text-center text-xl font-black italic uppercase tracking-[0.3em] text-white drop-shadow-[0_2px_6px_rgba(0,0,0,0.85)] sm:text-2xl">
+              Duelo de Times {partida ? `• Partida #${partida.id}` : ""}
+            </h1>
+            {partida?.status === "EM_ANDAMENTO" && (
+              <span className="flex items-center gap-1.5 text-[11px] font-mono font-bold text-amber-400 bg-amber-500/20 px-3 py-0.5 rounded-full border border-amber-500/40 animate-pulse">
+                <Radio className="h-3.5 w-3.5" />
+                AO VIVO
+              </span>
+            )}
+          </div>
 
           <div className="relative flex h-full flex-col items-center justify-center gap-10 px-6 sm:flex-row sm:gap-4">
             <div className="vs-fighter-left flex flex-1 flex-col items-center gap-3">
@@ -178,7 +248,7 @@ export function VersusOverlay({ timeA, timeB, onConfirmar, ehFinal = false }: Ve
               {fase === "intro" && (
                 <button
                   type="button"
-                  onClick={() => setFase("contagem")}
+                  onClick={handleIniciarContagem}
                   className="vs-button rounded-md border-2 border-yellow-400 bg-black/40 px-6 py-2 text-sm font-black uppercase tracking-widest text-yellow-400 transition-colors hover:bg-yellow-400 hover:text-black sm:text-base"
                 >
                   Iniciar partida

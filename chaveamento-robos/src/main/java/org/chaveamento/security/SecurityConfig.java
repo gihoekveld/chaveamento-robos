@@ -57,6 +57,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/times/time/*/audio-gol").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/times/time/*/audio-vitoria").permitAll()
                         .requestMatchers(
+                                "/error",
                                 "/swagger-ui/**",
                                 "/v3/api-docs/**"
                         ).permitAll()

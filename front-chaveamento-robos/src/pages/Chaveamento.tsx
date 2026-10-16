@@ -1,6 +1,6 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, RotateCcw, Shuffle, Swords, Trophy, Users } from "lucide-react";
+import { AlertTriangle, RotateCcw, Shuffle, Swords, Trophy, Users, Copy } from "lucide-react";
 import { toast } from "sonner";
 import { chaveamentoService } from "@/services/chaveamentoService";
 import { partidaService } from "@/services/partidaService";
@@ -100,6 +100,8 @@ export default function Chaveamento() {
     queryKey: ["chaveamento", torneioId],
     queryFn: () => chaveamentoService.listar(torneioId as number),
     enabled: torneioId !== "",
+    refetchInterval: 1500, // Atualização automática em tempo real a cada 1.5 segundos
+    refetchIntervalInBackground: true, // Continua atualizando mesmo com a aba em segundo plano durante a batalha
   });
 
   const gerarChaveamento = useMutation({
@@ -526,19 +528,24 @@ export default function Chaveamento() {
         </DialogContent>
       </Dialog>
 
-      {partidaEmAnimacao && (
-        <VersusOverlay
-          timeA={getTime(partidaEmAnimacao.timeAId)}
-          timeB={getTime(partidaEmAnimacao.timeBId)}
-          ehFinal={partidaEmAnimacao.fase === "FINAL"}
-          onConfirmar={(scoreA, scoreB) => {
-            abrirDialogResultado(partidaEmAnimacao);
-            setPlacarA(String(scoreA));
-            setPlacarB(String(scoreB));
-            setPartidaEmAnimacao(null);
-          }}
-        />
-      )}
+      {partidaEmAnimacao && (() => {
+        const partidaAoVivo = partidas?.find((p) => p.id === partidaEmAnimacao.id) ?? partidaEmAnimacao;
+        return (
+          <VersusOverlay
+            partida={partidaAoVivo}
+            timeA={getTime(partidaAoVivo.timeAId)}
+            timeB={getTime(partidaAoVivo.timeBId)}
+            ehFinal={partidaAoVivo.fase === "FINAL"}
+            onFechar={() => setPartidaEmAnimacao(null)}
+            onConfirmar={(scoreA, scoreB) => {
+              abrirDialogResultado(partidaAoVivo);
+              setPlacarA(String(scoreA));
+              setPlacarB(String(scoreB));
+              setPartidaEmAnimacao(null);
+            }}
+          />
+        );
+      })()}
 
       {campeao && <ChampionOverlay time={campeao} onClose={() => setCampeao(null)} />}
     </div>
@@ -595,6 +602,7 @@ interface MatchCardProps {
 
 function MatchCard({ partida, timeA, timeB, onRegistrarResultado, onIniciarPartida, destaque = false }: MatchCardProps) {
   const finalizada = partida.status === "FINALIZADA";
+  const emAndamento = partida.status === "EM_ANDAMENTO";
   const prontaParaJogar = partida.timeAId !== null && partida.timeBId !== null;
   const venceuA = finalizada && partida.vencedorId === partida.timeAId;
   const venceuB = finalizada && partida.vencedorId === partida.timeBId;
@@ -606,28 +614,76 @@ function MatchCard({ partida, timeA, timeB, onRegistrarResultado, onIniciarParti
       className={`flex flex-col justify-center gap-1.5 rounded-md border bg-card px-2 py-2 shadow-sm ${
         destaque ? "text-base" : "text-sm"
       }`}
-      style={{ height: destaque ? CARD_HEIGHT + 16 : CARD_HEIGHT }}
+      style={{ height: destaque ? CARD_HEIGHT + 24 : CARD_HEIGHT + 12 }}
     >
-      <div className="flex items-center justify-center gap-1.5">
-        <TeamAvatar time={timeA} apagado={perdeuA} destaque={destaque} />
-        <span className={`min-w-0 flex-1 truncate text-right ${nomeClasse(venceuA)}`}>
-          {timeA?.nome ?? "A definir"}
-          {partida.placarTimeA !== null && <span className="ml-1.5 tabular-nums">{partida.placarTimeA}</span>}
+      <div className="flex items-center justify-between text-[10px] text-muted-foreground px-0.5 font-mono">
+        <span className="font-semibold text-primary">Partida #{partida.id}</span>
+        <span className={emAndamento ? "text-amber-500 font-bold animate-pulse flex items-center gap-1" : finalizada ? "text-emerald-500 font-medium" : ""}>
+          {emAndamento && <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-ping" />}
+          {partida.status}
         </span>
+      </div>
 
-        <span className="shrink-0 text-xs text-muted-foreground">x</span>
+      <div className="flex items-center justify-between gap-1">
+        {/* Time A */}
+        <div className="flex items-center gap-1.5 min-w-0 flex-1 justify-end">
+          <TeamAvatar time={timeA} apagado={perdeuA} destaque={destaque} />
+          <span
+            className={`min-w-0 truncate text-right font-medium ${nomeClasse(venceuA)}`}
+            title={timeA?.nome}
+          >
+            {timeA?.nome ?? "A definir"}
+          </span>
+          <span
+            className={`shrink-0 min-w-[22px] text-center font-mono font-bold text-xs px-1.5 py-0.5 rounded transition-all ${
+              venceuA
+                ? "bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 font-black border border-emerald-500/40"
+                : emAndamento
+                ? "bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/30"
+                : "bg-muted text-foreground"
+            }`}
+          >
+            {partida.placarTimeA !== null
+              ? partida.placarTimeA
+              : emAndamento
+              ? 0
+              : "-"}
+          </span>
+        </div>
 
-        <span className={`min-w-0 flex-1 truncate ${nomeClasse(venceuB)}`}>
-          {partida.placarTimeB !== null && <span className="mr-1.5 tabular-nums">{partida.placarTimeB}</span>}
-          {timeB?.nome ?? "A definir"}
-        </span>
-        <TeamAvatar time={timeB} apagado={perdeuB} destaque={destaque} />
+        <span className="shrink-0 text-[11px] font-bold text-muted-foreground/60 px-0.5">x</span>
+
+        {/* Time B */}
+        <div className="flex items-center gap-1.5 min-w-0 flex-1">
+          <span
+            className={`shrink-0 min-w-[22px] text-center font-mono font-bold text-xs px-1.5 py-0.5 rounded transition-all ${
+              venceuB
+                ? "bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 font-black border border-emerald-500/40"
+                : emAndamento
+                ? "bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/30"
+                : "bg-muted text-foreground"
+            }`}
+          >
+            {partida.placarTimeB !== null
+              ? partida.placarTimeB
+              : emAndamento
+              ? 0
+              : "-"}
+          </span>
+          <span
+            className={`min-w-0 truncate font-medium ${nomeClasse(venceuB)}`}
+            title={timeB?.nome}
+          >
+            {timeB?.nome ?? "A definir"}
+          </span>
+          <TeamAvatar time={timeB} apagado={perdeuB} destaque={destaque} />
+        </div>
       </div>
 
       {!finalizada && prontaParaJogar && (
         <div className="flex items-center justify-center gap-2 text-[11px] font-medium">
           <button type="button" onClick={onIniciarPartida} className="text-muted-foreground hover:underline">
-            Iniciar partida
+            {emAndamento ? "Ver duelo ao vivo" : "Iniciar partida"}
           </button>
           <span className="text-muted-foreground/50">·</span>
           <button type="button" onClick={onRegistrarResultado} className="text-primary hover:underline">
