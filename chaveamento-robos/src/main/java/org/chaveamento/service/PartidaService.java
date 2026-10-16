@@ -126,31 +126,26 @@ public class PartidaService {
         partida.setPlacarTimeA(placarA);
         partida.setPlacarTimeB(placarB);
 
-        int vitoriasParaGanhar = request.vitoriasParaGanhar() != null ? request.vitoriasParaGanhar() : 2;
+        Integer vitoriasParaGanhar = request.vitoriasParaGanhar();
         boolean finalizarPorDuasSeguidas = Boolean.TRUE.equals(request.finalizarComDuasSeguidas());
 
         boolean deveFinalizar = false;
         Time vencedor = null;
 
-        // Condição 1: Atingiu o número de vitórias estipulado (ex: 2 em MD3)
-        if (placarA >= vitoriasParaGanhar) {
+        // Condição 1: Atingiu o número de vitórias estipulado (somente se informado pelo cliente)
+        if (vitoriasParaGanhar != null && placarA >= vitoriasParaGanhar) {
             deveFinalizar = true;
             vencedor = partida.getTimeA();
-        } else if (placarB >= vitoriasParaGanhar) {
+        } else if (vitoriasParaGanhar != null && placarB >= vitoriasParaGanhar) {
             deveFinalizar = true;
             vencedor = partida.getTimeB();
         }
-        // Condição 2: Duas vitórias seguidas (ex: 2x0)
-        else if (finalizarPorDuasSeguidas) {
-            if (placarA >= 2 && placarB == 0) {
-                deveFinalizar = true;
-                vencedor = partida.getTimeA();
-            } else if (placarB >= 2 && placarA == 0) {
-                deveFinalizar = true;
-                vencedor = partida.getTimeB();
-            }
+        // Condição 2: Duas vitórias seguidas (somente se solicitado explicitamente pelo cliente)
+        else if (finalizarPorDuasSeguidas && ((placarA >= 2 && placarB == 0) || (placarB >= 2 && placarA == 0))) {
+            deveFinalizar = true;
+            vencedor = (placarA > placarB) ? partida.getTimeA() : partida.getTimeB();
         }
-        // Condição 3: Limite de rounds atingido (ex: 3 rounds jogados)
+        // Condição 3: Limite de rounds atingido (somente se informado pelo cliente)
         else if (request.maxRounds() != null && (placarA + placarB) >= request.maxRounds()) {
             if (placarA != placarB) {
                 deveFinalizar = true;
