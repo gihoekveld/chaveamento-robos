@@ -23,6 +23,8 @@ interface VersusOverlayProps {
   onConfirmar: (placarA: number, placarB: number) => void;
   onFechar?: () => void;
   ehFinal?: boolean;
+  modo?: ModoControle;
+  onModoChange?: (modo: ModoControle) => void;
 }
 
 type Fase = "intro" | "contagem" | "vencedor";
@@ -38,11 +40,26 @@ function corPlacar(minha: number, outra: number) {
   return diferenca > 0 ? "text-emerald-400" : "text-red-500";
 }
 
-export function VersusOverlay({ partida, timeA, timeB, onConfirmar, onFechar, ehFinal = false }: VersusOverlayProps) {
+export function VersusOverlay({
+  partida,
+  timeA,
+  timeB,
+  onConfirmar,
+  onFechar,
+  ehFinal = false,
+  modo: modoProp,
+  onModoChange,
+}: VersusOverlayProps) {
   const [fase, setFase] = useState<Fase>(partida?.status === "EM_ANDAMENTO" ? "contagem" : "intro");
-  const [modo, setModo] = useState<ModoControle>(
-    partida?.status === "EM_ANDAMENTO" ? "automatico" : "manual"
+  const [modoLocal, setModoLocal] = useState<ModoControle>(
+    modoProp ?? (partida?.status === "EM_ANDAMENTO" ? "automatico" : "manual")
   );
+  const modo = modoProp ?? modoLocal;
+
+  function alterarModo(novoModo: ModoControle) {
+    setModoLocal(novoModo);
+    onModoChange?.(novoModo);
+  }
   const [placarA, setPlacarA] = useState(partida?.placarTimeA ?? 0);
   const [placarB, setPlacarB] = useState(partida?.placarTimeB ?? 0);
   const [menuAberto, setMenuAberto] = useState(false);
@@ -84,7 +101,7 @@ export function VersusOverlay({ partida, timeA, timeB, onConfirmar, onFechar, eh
     // Se o simulador iniciou a partida externamente, avança a tela no modo automático
     if (partida.status === "EM_ANDAMENTO" && fase === "intro") {
       setFase("contagem");
-      setModo("automatico");
+      alterarModo("automatico");
     }
 
     // Se a partida foi finalizada pelo simulador na API
@@ -99,7 +116,7 @@ export function VersusOverlay({ partida, timeA, timeB, onConfirmar, onFechar, eh
 
   function handleIniciarContagem(modoEscolhido?: ModoControle) {
     if (modoEscolhido) {
-      setModo(modoEscolhido);
+      alterarModo(modoEscolhido);
     }
     setFase("contagem");
     if (partida && partida.status === "AGUARDANDO") {
@@ -187,7 +204,7 @@ export function VersusOverlay({ partida, timeA, timeB, onConfirmar, onFechar, eh
                 <div className="grid grid-cols-2 gap-1.5 p-1 rounded-lg bg-white/5 border border-white/10">
                   <button
                     type="button"
-                    onClick={() => setModo("manual")}
+                    onClick={() => alterarModo("manual")}
                     className={`flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-md font-medium text-xs transition-all ${
                       modo === "manual"
                         ? "bg-yellow-400 text-black font-bold shadow"
@@ -199,7 +216,7 @@ export function VersusOverlay({ partida, timeA, timeB, onConfirmar, onFechar, eh
                   </button>
                   <button
                     type="button"
-                    onClick={() => setModo("automatico")}
+                    onClick={() => alterarModo("automatico")}
                     className={`flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-md font-medium text-xs transition-all ${
                       modo === "automatico"
                         ? "bg-yellow-400 text-black font-bold shadow"

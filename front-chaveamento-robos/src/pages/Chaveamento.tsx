@@ -68,6 +68,7 @@ export default function Chaveamento() {
   const [erroResultado, setErroResultado] = useState<string | null>(null);
   const [confirmandoReset, setConfirmandoReset] = useState(false);
   const [partidaEmAnimacao, setPartidaEmAnimacao] = useState<Partida | null>(null);
+  const [modoDuelo, setModoDuelo] = useState<"manual" | "automatico">("manual");
   const [campeao, setCampeao] = useState<TimeInfo | null>(null);
 
   const { data: torneios, isLoading: carregandoTorneios } = useQuery({
@@ -92,6 +93,9 @@ export default function Chaveamento() {
     }
   }, [torneios, torneioId]);
 
+  // Desativa completamente o fetch na API quando estiver em duelo no modo manual
+  const intervaloPolling = (partidaEmAnimacao && modoDuelo === "manual") ? false : 1500;
+
   const {
     data: partidas,
     isLoading: carregandoPartidas,
@@ -101,8 +105,8 @@ export default function Chaveamento() {
     queryKey: ["chaveamento", torneioId],
     queryFn: () => chaveamentoService.listar(torneioId as number),
     enabled: torneioId !== "",
-    refetchInterval: 1500, // Atualização automática em tempo real a cada 1.5 segundos
-    refetchIntervalInBackground: true, // Continua atualizando mesmo com a aba em segundo plano durante a batalha
+    refetchInterval: intervaloPolling,
+    refetchIntervalInBackground: intervaloPolling !== false,
   });
 
   const gerarChaveamento = useMutation({
@@ -218,6 +222,7 @@ export default function Chaveamento() {
 
   function abrirAnimacaoPartida(partida: Partida) {
     setPartidaEmAnimacao(partida);
+    setModoDuelo(partida.status === "EM_ANDAMENTO" ? "automatico" : "manual");
   }
 
   function fecharDialogResultado() {
@@ -537,6 +542,8 @@ export default function Chaveamento() {
             timeA={getTime(partidaAoVivo.timeAId)}
             timeB={getTime(partidaAoVivo.timeBId)}
             ehFinal={partidaAoVivo.fase === "FINAL"}
+            modo={modoDuelo}
+            onModoChange={setModoDuelo}
             onFechar={() => setPartidaEmAnimacao(null)}
             onConfirmar={(scoreA, scoreB) => {
               abrirDialogResultado(partidaAoVivo);
