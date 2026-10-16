@@ -268,29 +268,6 @@ export function VersusOverlay({ partida, timeA, timeB, onConfirmar, onFechar, eh
                   <span className="text-[10px] font-semibold uppercase tracking-[0.3em] text-white/60 sm:text-xs">
                     Pontuação atual
                   </span>
-                  {modo === "manual" && (
-                    <div className="flex items-center gap-2 mt-1 z-20">
-                      <button
-                        type="button"
-                        onClick={() => setPlacarA((v) => Math.max(0, v - 1))}
-                        className="h-7 w-7 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center font-bold text-sm transition-all active:scale-90"
-                        title="Diminuir ponto"
-                      >
-                        -
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setPlacarA((v) => v + 1);
-                          tocarAudio(timeA?.audioGol ?? null);
-                        }}
-                        className="h-7 w-7 rounded-full bg-white/20 hover:bg-white/30 text-white flex items-center justify-center font-bold text-sm transition-all active:scale-90"
-                        title="Adicionar ponto (ou seta ←)"
-                      >
-                        +
-                      </button>
-                    </div>
-                  )}
                 </>
               )}
             </div>
@@ -360,29 +337,6 @@ export function VersusOverlay({ partida, timeA, timeB, onConfirmar, onFechar, eh
                   <span className="text-[10px] font-semibold uppercase tracking-[0.3em] text-white/60 sm:text-xs">
                     Pontuação atual
                   </span>
-                  {modo === "manual" && (
-                    <div className="flex items-center gap-2 mt-1 z-20">
-                      <button
-                        type="button"
-                        onClick={() => setPlacarB((v) => Math.max(0, v - 1))}
-                        className="h-7 w-7 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center font-bold text-sm transition-all active:scale-90"
-                        title="Diminuir ponto"
-                      >
-                        -
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setPlacarB((v) => v + 1);
-                          tocarAudio(timeB?.audioGol ?? null);
-                        }}
-                        className="h-7 w-7 rounded-full bg-white/20 hover:bg-white/30 text-white flex items-center justify-center font-bold text-sm transition-all active:scale-90"
-                        title="Adicionar ponto (ou seta →)"
-                      >
-                        +
-                      </button>
-                    </div>
-                  )}
                 </>
               )}
             </div>
