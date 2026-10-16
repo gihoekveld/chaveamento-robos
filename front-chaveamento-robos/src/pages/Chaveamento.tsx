@@ -328,7 +328,7 @@ export default function Chaveamento() {
 
               <Button
                 variant="outline"
-                className="text-destructive hover:text-destructive"
+                className="text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive hover:border-destructive/50"
                 onClick={() => setConfirmandoReset(true)}
               >
                 <RotateCcw className="h-4 w-4" />

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Eye, Plus, Trophy, Users, X } from "lucide-react";
+import { Check, Eye, Plus, Trophy, UserMinus, Users, X } from "lucide-react";
 import { toast } from "sonner";
 import { timeService } from "@/services/timeService";
 import { torneioService } from "@/services/torneioService";
@@ -32,6 +32,17 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+
+function extrairMensagemErro(err: any, fallback: string): string {
+  const data = err?.response?.data;
+  if (!data) return fallback;
+  if (typeof data === "string" && data.trim()) return data;
+  if (typeof data.erro === "string" && data.erro.trim()) return data.erro;
+  if (typeof data.message === "string" && data.message.trim()) return data.message;
+  if (typeof data.error === "string" && data.error.trim()) return data.error;
+  if (typeof data.detail === "string" && data.detail.trim()) return data.detail;
+  return fallback;
+}
 
 const tipoLabel: Record<EnumTime, string> = {
   ROBOCODE: "RoboCode",
@@ -122,13 +133,12 @@ export default function Times() {
 
     try {
       await torneioService.inscreverTime(torneioDaCategoria.id, time.id);
-      queryClient.invalidateQueries({ queryKey: ["torneio-times", torneioDaCategoria.id] });
+      invalidarTimes();
       toast.success(`Time inscrito no torneio de ${tipoLabel[time.tipo]}.`);
-    } catch {
-      // ao aprovar, o time normalmente ja foi inscrito no cadastro — so avisa
-      // quando alguem clica manualmente em "Inscrever no torneio"
+    } catch (err: any) {
       if (opts?.avisarSeJaInscrito) {
-        toast.info("Esse time já estava inscrito no torneio.");
+        const msg = extrairMensagemErro(err, "Esse time já estava inscrito no torneio.");
+        toast.info(msg);
       }
     }
   }
@@ -140,7 +150,10 @@ export default function Times() {
       toast.success("Time aprovado.");
       tentarInscreverNoTorneio(timeAprovado);
     },
-    onError: () => toast.error("Não foi possível aprovar o time."),
+    onError: (err: any) => {
+      const msg = extrairMensagemErro(err, "Não foi possível aprovar o time.");
+      toast.error(msg);
+    },
     onSettled: () => setProcessandoId(null),
   });
 
@@ -150,7 +163,24 @@ export default function Times() {
       invalidarTimes();
       toast.success("Time reprovado.");
     },
-    onError: () => toast.error("Não foi possível reprovar o time."),
+    onError: (err: any) => {
+      const msg = extrairMensagemErro(err, "Não foi possível reprovar o time.");
+      toast.error(msg);
+    },
+    onSettled: () => setProcessandoId(null),
+  });
+
+  const removerInscricaoMutation = useMutation({
+    mutationFn: ({ torneioId, timeId }: { torneioId: number; timeId: number }) =>
+      torneioService.removerTime(torneioId, timeId),
+    onSuccess: () => {
+      invalidarTimes();
+      toast.success("Time desinscrito do torneio.");
+    },
+    onError: (err: any) => {
+      const msg = extrairMensagemErro(err, "Não foi possível remover o time do torneio.");
+      toast.error(msg);
+    },
     onSettled: () => setProcessandoId(null),
   });
 
@@ -198,6 +228,12 @@ export default function Times() {
     setProcessandoId(time.id);
     await tentarInscreverNoTorneio(time, { avisarSeJaInscrito: true });
     setProcessandoId(null);
+  }
+
+  function handleRemoverInscricao(time: Time) {
+    if (!time.torneioId) return;
+    setProcessandoId(time.id);
+    removerInscricaoMutation.mutate({ torneioId: time.torneioId, timeId: time.id });
   }
 
   return (
@@ -264,6 +300,7 @@ export default function Times() {
                   <TableHead className="w-16" />
                   <TableHead>Nome</TableHead>
                   <TableHead>Categoria</TableHead>
+                  <TableHead>Torneio</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Ações</TableHead>
                 </TableRow>
@@ -288,6 +325,15 @@ export default function Times() {
                     <TableCell className="font-medium">{time.nome}</TableCell>
                     <TableCell>{tipoLabel[time.tipo]}</TableCell>
                     <TableCell>
+                      {time.torneioId ? (
+                        <Badge variant="outline" className="font-normal text-muted-foreground">
+                          Torneio #{time.torneioId}
+                        </Badge>
+                      ) : (
+                        <span className="text-sm text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
                       <Badge variant={statusVariant[time.status]}>{statusLabel[time.status]}</Badge>
                     </TableCell>
                     <TableCell className="text-right">
@@ -310,7 +356,7 @@ export default function Times() {
                             <Button
                               size="sm"
                               variant="outline"
-                              className="text-destructive hover:text-destructive"
+                              className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30"
                               disabled={processandoId === time.id}
                               onClick={() => handleReprovar(time)}
                             >
@@ -320,15 +366,28 @@ export default function Times() {
                           </>
                         )}
                         {isAdmin && time.status === "APROVADO" && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            disabled={processandoId === time.id}
-                            onClick={() => handleInscrever(time)}
-                          >
-                            <Trophy className="h-3.5 w-3.5" />
-                            Inscrever no torneio
-                          </Button>
+                          time.torneioId ? (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30"
+                              disabled={processandoId === time.id}
+                              onClick={() => handleRemoverInscricao(time)}
+                            >
+                              <UserMinus className="h-3.5 w-3.5" />
+                              Remover do torneio
+                            </Button>
+                          ) : (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={processandoId === time.id}
+                              onClick={() => handleInscrever(time)}
+                            >
+                              <Trophy className="h-3.5 w-3.5 text-muted-foreground" />
+                              Inscrever no torneio
+                            </Button>
+                          )
                         )}
                       </div>
                     </TableCell>
@@ -361,81 +420,116 @@ export default function Times() {
             <ErrorState message="Não foi possível carregar os detalhes do time." />
           ) : (
             timeDetalhe && (
-            <>
-              <DialogHeader>
-                <DialogTitle>{timeDetalhe.nome}</DialogTitle>
-                <DialogDescription>
-                  {tipoLabel[timeDetalhe.tipo]} ·{" "}
-                  <Badge variant={statusVariant[timeDetalhe.status]} className="align-middle">
-                    {statusLabel[timeDetalhe.status]}
-                  </Badge>
-                </DialogDescription>
-              </DialogHeader>
+              <>
+                <DialogHeader>
+                  <DialogTitle>{timeDetalhe.nome}</DialogTitle>
+                  <DialogDescription className="flex flex-wrap items-center gap-2 pt-1">
+                    <span>{tipoLabel[timeDetalhe.tipo]}</span>
+                    <span>·</span>
+                    <Badge variant={statusVariant[timeDetalhe.status]} className="align-middle">
+                      {statusLabel[timeDetalhe.status]}
+                    </Badge>
+                    {timeDetalhe.torneioId ? (
+                      <Badge variant="outline" className="font-normal text-muted-foreground">
+                        Torneio #{timeDetalhe.torneioId}
+                      </Badge>
+                    ) : null}
+                  </DialogDescription>
+                </DialogHeader>
 
-              <div className="space-y-4 py-2">
-                <TimeImagemRevisao
-                  imagemUrl={timeDetalhe.imagem}
-                  nomeTime={timeDetalhe.nome}
-                  editavel={isAdmin}
-                  enviando={
-                    uploadImagemMutation.isPending && uploadImagemMutation.variables?.id === timeDetalhe.id
-                  }
-                  onSubstituir={(file) => uploadImagemMutation.mutate({ id: timeDetalhe.id, file })}
-                />
+                <div className="space-y-4 py-2">
+                  <TimeImagemRevisao
+                    imagemUrl={timeDetalhe.imagem}
+                    nomeTime={timeDetalhe.nome}
+                    editavel={isAdmin}
+                    enviando={
+                      uploadImagemMutation.isPending && uploadImagemMutation.variables?.id === timeDetalhe.id
+                    }
+                    onSubstituir={(file) => uploadImagemMutation.mutate({ id: timeDetalhe.id, file })}
+                  />
 
-                <TimeAudioRevisao
-                  label="Áudio de gol (até 2s)"
-                  audioUrl={timeDetalhe.audioGol}
-                  duracaoMaxima={2}
-                  editavel={isAdmin}
-                  enviando={uploadAudioGolMutation.isPending && uploadAudioGolMutation.variables?.id === timeDetalhe.id}
-                  onSubstituir={(file) => uploadAudioGolMutation.mutate({ id: timeDetalhe.id, file })}
-                />
+                  <TimeAudioRevisao
+                    label="Áudio de gol (até 2s)"
+                    audioUrl={timeDetalhe.audioGol}
+                    duracaoMaxima={2}
+                    editavel={isAdmin}
+                    enviando={uploadAudioGolMutation.isPending && uploadAudioGolMutation.variables?.id === timeDetalhe.id}
+                    onSubstituir={(file) => uploadAudioGolMutation.mutate({ id: timeDetalhe.id, file })}
+                  />
 
-                <TimeAudioRevisao
-                  label="Áudio de vitória (até 10s)"
-                  audioUrl={timeDetalhe.audioVitoria}
-                  duracaoMaxima={10}
-                  editavel={isAdmin}
-                  enviando={
-                    uploadAudioVitoriaMutation.isPending && uploadAudioVitoriaMutation.variables?.id === timeDetalhe.id
-                  }
-                  onSubstituir={(file) => uploadAudioVitoriaMutation.mutate({ id: timeDetalhe.id, file })}
-                />
-              </div>
-
-              {isAdmin && timeDetalhe.status === "PENDENTE" && (
-                <div className="flex justify-end gap-2 border-t pt-4">
-                  <Button
-                    variant="outline"
-                    className="text-destructive hover:text-destructive"
-                    disabled={processandoId === timeDetalhe.id}
-                    onClick={() => handleReprovar(timeDetalhe)}
-                  >
-                    <X className="h-3.5 w-3.5" />
-                    Reprovar
-                  </Button>
-                  <Button disabled={processandoId === timeDetalhe.id} onClick={() => handleAprovar(timeDetalhe)}>
-                    <Check className="h-3.5 w-3.5" />
-                    Aprovar
-                  </Button>
+                  <TimeAudioRevisao
+                    label="Áudio de vitória (até 10s)"
+                    audioUrl={timeDetalhe.audioVitoria}
+                    duracaoMaxima={10}
+                    editavel={isAdmin}
+                    enviando={
+                      uploadAudioVitoriaMutation.isPending && uploadAudioVitoriaMutation.variables?.id === timeDetalhe.id
+                    }
+                    onSubstituir={(file) => uploadAudioVitoriaMutation.mutate({ id: timeDetalhe.id, file })}
+                  />
                 </div>
-              )}
 
-              {isAdmin && timeDetalhe.status === "APROVADO" && (
-                <div className="flex justify-end border-t pt-4">
-                  <Button
-                    variant="outline"
-                    disabled={processandoId === timeDetalhe.id}
-                    onClick={() => handleInscrever(timeDetalhe)}
-                  >
-                    <Trophy className="h-3.5 w-3.5" />
-                    Inscrever no torneio
-                  </Button>
-                </div>
-              )}
-            </>
-          )
+                {isAdmin && (
+                  <div className="flex flex-wrap justify-end gap-2 border-t pt-4">
+                    {timeDetalhe.status === "PENDENTE" && (
+                      <>
+                        <Button
+                          variant="outline"
+                          className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30"
+                          disabled={processandoId === timeDetalhe.id}
+                          onClick={() => handleReprovar(timeDetalhe)}
+                        >
+                          <X className="h-3.5 w-3.5" />
+                          Reprovar
+                        </Button>
+                        <Button
+                          variant="outline"
+                          disabled={processandoId === timeDetalhe.id}
+                          onClick={() => handleAprovar(timeDetalhe)}
+                        >
+                          <Check className="h-3.5 w-3.5" />
+                          Aprovar
+                        </Button>
+                      </>
+                    )}
+
+                    {timeDetalhe.status === "APROVADO" && (
+                      timeDetalhe.torneioId ? (
+                        <Button
+                          variant="outline"
+                          className="text-destructive border-destructive/30 hover:bg-destructive/10 hover:text-destructive hover:border-destructive/50"
+                          disabled={processandoId === timeDetalhe.id}
+                          onClick={() => handleRemoverInscricao(timeDetalhe)}
+                        >
+                          <UserMinus className="h-3.5 w-3.5" />
+                          Remover do torneio
+                        </Button>
+                      ) : (
+                        <Button
+                          variant="default"
+                          disabled={processandoId === timeDetalhe.id}
+                          onClick={() => handleInscrever(timeDetalhe)}
+                        >
+                          <Trophy className="h-3.5 w-3.5" />
+                          Inscrever no torneio
+                        </Button>
+                      )
+                    )}
+
+                    {timeDetalhe.status === "REJEITADO" && (
+                      <Button
+                        variant="outline"
+                        disabled={processandoId === timeDetalhe.id}
+                        onClick={() => handleAprovar(timeDetalhe)}
+                      >
+                        <Check className="h-3.5 w-3.5" />
+                        Aprovar
+                      </Button>
+                    )}
+                  </div>
+                )}
+              </>
+            )
           )}
         </DialogContent>
       </Dialog>
