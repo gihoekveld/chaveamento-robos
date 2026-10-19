@@ -56,7 +56,7 @@ function ehPotenciaDeDois(n: number) {
 }
 
 const ROW_HEIGHT = 160;
-const CARD_HEIGHT = 124;
+const CARD_HEIGHT = 136;
 const COLUMN_GAP = 56;
 const COLUMN_WIDTH = 288;
 
@@ -75,6 +75,7 @@ export default function Chaveamento() {
   const [placarB, setPlacarB] = useState("");
   const [erroResultado, setErroResultado] = useState<string | null>(null);
   const [confirmandoReset, setConfirmandoReset] = useState(false);
+  const [confirmandoResetPartida, setConfirmandoResetPartida] = useState(false);
   const [partidaEmAnimacao, setPartidaEmAnimacao] = useState<Partida | null>(null);
   const [modoDuelo, setModoDuelo] = useState<"manual" | "automatico">("manual");
   const [campeao, setCampeao] = useState<TimeInfo | null>(null);
@@ -185,6 +186,22 @@ export default function Chaveamento() {
     },
   });
 
+  const resetarPartidaMutation = useMutation({
+    mutationFn: (partidaId: number) => partidaService.resetar(partidaId),
+    onSuccess: (partidaAtualizada) => {
+      limparPlacarManual(partidaAtualizada.id);
+      limparModoPartida(partidaAtualizada.id);
+      queryClient.invalidateQueries({ queryKey: ["chaveamento", torneioId] });
+      toast.success("Partida reiniciada com sucesso. Placar e vencedor foram zerados.");
+      fecharDialogResultado();
+      setConfirmandoResetPartida(false);
+    },
+    onError: (err: any) => {
+      const msg = err?.response?.data?.erro ?? "Não foi possível reiniciar a partida.";
+      toast.error(msg);
+    },
+  });
+
   const timePorId = useMemo(() => {
     const mapa = new Map<number, Time>();
     times?.forEach((time) => mapa.set(time.id, time));
@@ -274,6 +291,7 @@ export default function Chaveamento() {
     setPlacarA("");
     setPlacarB("");
     setErroResultado(null);
+    setConfirmandoResetPartida(false);
   }
 
   function handleSubmitResultado(e: FormEvent) {
@@ -597,10 +615,54 @@ export default function Chaveamento() {
                   </div>
                 </div>
 
+                {partidaSelecionada.observacao && (
+                  <div className="text-xs bg-amber-500/10 text-amber-700 dark:text-amber-300 p-2.5 rounded border border-amber-500/30 flex items-start gap-2">
+                    <span className="text-sm">📌</span>
+                    <div>
+                      <strong>Detalhe / Critério da Vitória:</strong>
+                      <p className="mt-0.5 font-medium">{partidaSelecionada.observacao}</p>
+                    </div>
+                  </div>
+                )}
+
                 {ehFinalizada && (
                   <p className="text-xs text-muted-foreground bg-muted/60 p-2.5 rounded border border-border/50">
                     💡 <strong>Edição de partida finalizada:</strong> Se você corrigir o placar ou alterar o time vencedor, a chave atualizará o resultado e avançará automaticamente o ganhador correto para a próxima fase.
                   </p>
+                )}
+
+                {ehFinalizada && confirmandoResetPartida && (
+                  <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-xs space-y-2">
+                    <div className="flex items-center gap-1.5 font-semibold text-destructive">
+                      <AlertTriangle className="h-4 w-4 shrink-0" />
+                      <span>Confirmar reinício da partida?</span>
+                    </div>
+                    <p className="text-muted-foreground leading-relaxed">
+                      Esta ação irá <strong>zerar o placar para 0 x 0</strong>, desmarcar o vencedor e retornar o status da partida para <strong>Aguardando</strong>. O avanço do vencedor na chave será revertido.
+                    </p>
+                    <div className="flex items-center justify-end gap-2 pt-1">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-xs"
+                        onClick={() => setConfirmandoResetPartida(false)}
+                        disabled={resetarPartidaMutation.isPending}
+                      >
+                        Cancelar
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        size="sm"
+                        className="h-7 text-xs"
+                        onClick={() => resetarPartidaMutation.mutate(partidaSelecionada.id)}
+                        disabled={resetarPartidaMutation.isPending}
+                      >
+                        {resetarPartidaMutation.isPending ? "Reiniciando..." : "Sim, reiniciar partida"}
+                      </Button>
+                    </div>
+                  </div>
                 )}
 
                 {erroResultado && <p className="text-xs font-medium text-destructive">{erroResultado}</p>}
@@ -622,13 +684,25 @@ export default function Chaveamento() {
                         Ver duelo ao vivo
                       </Button>
                     )}
+                    {ehFinalizada && !confirmandoResetPartida && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setConfirmandoResetPartida(true)}
+                        className="text-xs text-muted-foreground hover:text-destructive hover:bg-destructive/10 h-8 px-2.5 flex items-center gap-1.5 transition-colors"
+                      >
+                        <RotateCcw className="h-3.5 w-3.5" />
+                        Reiniciar partida
+                      </Button>
+                    )}
                   </div>
 
                   <div className="flex items-center justify-end gap-2">
                     <Button type="button" variant="outline" size="sm" onClick={fecharDialogResultado}>
                       Cancelar
                     </Button>
-                    <Button type="submit" size="sm" disabled={registrarResultado.isPending || empate}>
+                    <Button type="submit" size="sm" disabled={registrarResultado.isPending || empate || confirmandoResetPartida}>
                       {registrarResultado.isPending
                         ? "Salvando..."
                         : ehFinalizada
@@ -762,6 +836,8 @@ function MatchCard({ partida, timeA, timeB, onRegistrarResultado, onIniciarParti
   const placarExibidoA = manualSalvo ? manualSalvo.placarA : partida.placarTimeA;
   const placarExibidoB = manualSalvo ? manualSalvo.placarB : partida.placarTimeB;
   const emAndamentoOuManual = emAndamento || manualSalvo !== null;
+  const temBadge = emAndamentoOuManual || finalizada;
+  const temBarraInferior = (!finalizada && prontaParaJogar) || (finalizada && Boolean(partida.observacao));
 
   const clicavel = prontaParaJogar || finalizada;
 
@@ -787,7 +863,7 @@ function MatchCard({ partida, timeA, timeB, onRegistrarResultado, onIniciarParti
           ? "Clique no card para ver detalhes e registrar o resultado"
           : undefined
       }
-      className={`flex flex-col justify-center gap-2 rounded-lg border bg-card p-2.5 shadow-sm transition-all ${
+      className={`flex flex-col justify-between rounded-lg border bg-card px-2.5 pt-2 pb-2 shadow-sm transition-all ${
         finalizada
           ? "opacity-75 hover:opacity-100 cursor-pointer hover:border-primary/50 hover:shadow-md"
           : prontaParaJogar
@@ -796,21 +872,26 @@ function MatchCard({ partida, timeA, timeB, onRegistrarResultado, onIniciarParti
       } ${destaque ? "text-base" : "text-sm"}`}
       style={{ height: destaque ? CARD_HEIGHT + 24 : CARD_HEIGHT }}
     >
-      {/* Badge centralizada de status - só renderiza se houver status ativo */}
-      {(emAndamentoOuManual || finalizada) && (
-        <div className="flex items-center justify-center">
-          {emAndamentoOuManual ? (
-            <span className="text-[9px] font-bold uppercase tracking-wider text-amber-500 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/25 flex items-center gap-1.5 animate-pulse">
-              <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-ping" />
-              Em andamento
-            </span>
-          ) : (
-            <span className="text-[9px] font-bold uppercase tracking-wider text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/25">
-              Finalizada
-            </span>
-          )}
-        </div>
-      )}
+      <div
+        className={`flex-1 flex flex-col justify-center min-h-0 ${
+          temBadge ? "gap-1" : "gap-1.5"
+        } ${temBarraInferior ? "pb-2" : ""}`}
+      >
+        {/* Badge centralizada de status - só renderiza se houver status ativo */}
+        {temBadge && (
+          <div className="flex items-center justify-center">
+            {emAndamentoOuManual ? (
+              <span className="text-[9px] font-bold uppercase tracking-wider text-amber-500 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/25 flex items-center gap-1.5 animate-pulse leading-none">
+                <span className="h-1.5 w-1.5 rounded-full bg-amber-500 animate-ping" />
+                Em andamento
+              </span>
+            ) : (
+              <span className="text-[9px] font-bold uppercase tracking-wider text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/25 leading-none">
+                Finalizada
+              </span>
+            )}
+          </div>
+        )}
 
       {/* Confronto: Avatar + Nome embaixo de cada time, e Placar no centro */}
       <div className="flex items-start justify-between gap-2 px-1">
@@ -873,10 +954,11 @@ function MatchCard({ partida, timeA, timeB, onRegistrarResultado, onIniciarParti
           </span>
         </div>
       </div>
+      </div>
 
       {/* Ações inferiores - apenas para partidas não finalizadas */}
       {!finalizada && prontaParaJogar && (
-        <div className="flex items-center justify-center gap-2 text-[11px] font-medium pt-1 border-t border-border/40">
+        <div className="flex items-center justify-center gap-2 text-[11px] font-medium pt-2 border-t border-border/40 shrink-0">
           <button
             type="button"
             onClick={(e) => {
@@ -898,6 +980,18 @@ function MatchCard({ partida, timeA, timeB, onRegistrarResultado, onIniciarParti
           >
             Registrar resultado
           </button>
+        </div>
+      )}
+
+      {/* Observação / Motivo do encerramento (se houver) */}
+      {finalizada && partida.observacao && (
+        <div className="flex items-center justify-center pt-2 border-t border-border/40 shrink-0">
+          <span
+            className="text-[10px] text-muted-foreground/90 truncate max-w-[210px] text-center italic"
+            title={partida.observacao}
+          >
+            📌 {partida.observacao}
+          </span>
         </div>
       )}
     </div>

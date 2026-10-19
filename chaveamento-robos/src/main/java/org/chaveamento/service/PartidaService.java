@@ -59,6 +59,7 @@ public class PartidaService {
         partida.setPlacarTimeA(0);
         partida.setPlacarTimeB(0);
         partida.setVencedor(null);
+        partida.setObservacao(null);
 
         Partida proxima = partida.getProximaPartida();
         if (proxima != null && proxima.getStatus() != StatusPartida.FINALIZADA) {
@@ -199,6 +200,9 @@ public class PartidaService {
 
         partida.setVencedor(vencedor);
         partida.setStatus(StatusPartida.FINALIZADA);
+        if (request.observacao() != null && !request.observacao().isBlank()) {
+            partida.setObservacao(request.observacao());
+        }
 
         avancarVencedor(partida);
 
@@ -238,6 +242,9 @@ public class PartidaService {
 
         partida.setVencedor(vencedor);
         partida.setStatus(StatusPartida.FINALIZADA);
+        if (request.observacao() != null && !request.observacao().isBlank()) {
+            partida.setObservacao(request.observacao());
+        }
 
         avancarVencedor(partida);
 
@@ -284,7 +291,8 @@ public class PartidaService {
                 partida.getPlacarTimeA(),
                 partida.getPlacarTimeB(),
                 partida.getVencedor() != null ? partida.getVencedor().getId() : null,
-                partida.getProximaPartida() != null ? partida.getProximaPartida().getId() : null
+                partida.getProximaPartida() != null ? partida.getProximaPartida().getId() : null,
+                partida.getObservacao()
         );
     }
 

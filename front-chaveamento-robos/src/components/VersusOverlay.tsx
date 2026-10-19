@@ -116,8 +116,8 @@ export function VersusOverlay({
   const manualSalvoInicial = getPlacarManualSalvo(partida?.id);
   const placarManualRef = useRef<{ placarA: number; placarB: number }>(
     manualSalvoInicial ?? {
-      placarA: partida?.placarTimeA ?? 0,
-      placarB: partida?.placarTimeB ?? 0,
+      placarA: modoInicial === "manual" ? (partida?.placarTimeA ?? 0) : 0,
+      placarB: modoInicial === "manual" ? (partida?.placarTimeB ?? 0) : 0,
     }
   );
 
@@ -159,13 +159,26 @@ export function VersusOverlay({
     if (novoModo === "manual") {
       // Alternando de AUTOMÁTICO para MANUAL:
       // Preserva o placar automático que estava na tela
-      placarAutoRef.current = { placarA, placarB };
+      const scoreAutoA = (partida?.placarTimeA ?? placarAutoRef.current.placarA ?? placarA) ?? 0;
+      const scoreAutoB = (partida?.placarTimeB ?? placarAutoRef.current.placarB ?? placarB) ?? 0;
+      placarAutoRef.current = { placarA: scoreAutoA, placarB: scoreAutoB };
 
       // Restaura o placar manual do localStorage ou ref
       const manualSalvo = getPlacarManualSalvo(partida?.id) ?? placarManualRef.current;
-      placarManualRef.current = manualSalvo;
-      setPlacarA(manualSalvo.placarA);
-      setPlacarB(manualSalvo.placarB);
+      const manualEstaZerado = !manualSalvo || (manualSalvo.placarA === 0 && manualSalvo.placarB === 0);
+
+      if (manualEstaZerado) {
+        // Se o manual estiver 0x0, inicia o placar manual com o mesmo placar que estava no modo automático
+        const novoManual = { placarA: scoreAutoA, placarB: scoreAutoB };
+        placarManualRef.current = novoManual;
+        salvarPlacarManual(partida?.id, novoManual.placarA, novoManual.placarB);
+        setPlacarA(novoManual.placarA);
+        setPlacarB(novoManual.placarB);
+      } else {
+        placarManualRef.current = manualSalvo;
+        setPlacarA(manualSalvo.placarA);
+        setPlacarB(manualSalvo.placarB);
+      }
     } else {
       // Alternando de MANUAL para AUTOMÁTICO:
       // Apenas se estava no modo manual salva o placar manual atual no localStorage
